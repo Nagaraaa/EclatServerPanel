@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>EclatServerPanel</AssemblyName>
     <RootNamespace>EclatServerPanel</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Description>Administration du serveur Pokémon Éclat via SSH</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>

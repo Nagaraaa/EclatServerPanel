@@ -1,87 +1,501 @@
-<Window x:Class="EclatServerPanel.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Éclat — Administration" Width="1210" Height="850" MinWidth="1020" MinHeight="720" WindowStartupLocation="CenterScreen" Background="#F5F4EF" Foreground="#202D28">
-  <Grid Background="#F5F4EF">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="222"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <Border Background="#172D24">
-      <DockPanel Margin="20,30,20,24">
-        <StackPanel DockPanel.Dock="Top" Margin="12,0,0,35">
-          <TextBlock Text="éclat" Foreground="#FCFBF4" FontFamily="Georgia" FontSize="37"/>
-          <TextBlock Text="ADMINISTRATION" Foreground="#A5B9AB" FontSize="10" Margin="1,9,0,0"/>
+<Window x:Class="EclatServerPanel.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:EclatServerPanel"
+        Title="Éclat — Administration" Width="1320" Height="860" MinWidth="1120" MinHeight="740"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Bg0}" Foreground="{StaticResource Text}"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="14" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+  </WindowChrome.WindowChrome>
+  <Window.Resources>
+    <Storyboard x:Key="Pulse" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="RenderTransform.ScaleX" From="1" To="1.55" Duration="0:0:1.8"/>
+      <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="RenderTransform.ScaleY" From="1" To="1.55" Duration="0:0:1.8"/>
+      <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity" From="0.7" To="0" Duration="0:0:1.8"/>
+      <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" From="0.35" To="0.6" Duration="0:0:0.9" AutoReverse="True"/>
+    </Storyboard>
+    <Storyboard x:Key="Spin" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="RefreshIcon" Storyboard.TargetProperty="RenderTransform.Angle" From="0" To="360" Duration="0:0:0.9"/>
+    </Storyboard>
+    <Storyboard x:Key="Busy" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="BusySweep" Storyboard.TargetProperty="RenderTransform.X" From="-400" To="1600" Duration="0:0:1.3"/>
+    </Storyboard>
+    <DataTemplate x:Key="PlayerRow">
+      <Grid Margin="0,0,0,10">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Border Width="38" Height="38" CornerRadius="19" Background="{Binding Avatar}"><TextBlock Text="{Binding Initial}" Foreground="#0A0F1F" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+          <TextBlock Text="{Binding Room}" Style="{StaticResource Hint}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
         </StackPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="12,0,9,0">
-          <Border Height="1" Background="#3A4C40" Margin="0,0,0,20"/>
-          <TextBlock Text="Le serveur continue de tourner quand vous fermez cette fenêtre." Foreground="#9DB2A3" FontSize="12" LineHeight="19"/>
-          <TextBlock x:Name="ModeText" Text="SSH · clé dédiée" Foreground="#D3BE87" FontSize="11" Margin="0,22,0,0"/>
-        </StackPanel>
-        <StackPanel>
-          <Button x:Name="NavOverview" Style="{StaticResource Nav}" Content="Vue d’ensemble" Tag="Overview" Click="Navigate_Click"/>
-          <Button x:Name="NavSessions" Style="{StaticResource Nav}" Content="Joueurs et salons" Tag="Sessions" Click="Navigate_Click"/>
-          <Button x:Name="NavLogs" Style="{StaticResource Nav}" Content="Journaux" Tag="Logs" Click="Navigate_Click"/>
-          <Button x:Name="NavBackups" Style="{StaticResource Nav}" Content="Sauvegardes" Tag="Backups" Click="Navigate_Click"/>
-          <Button x:Name="NavDiagnostics" Style="{StaticResource Nav}" Content="Diagnostic" Tag="Diagnostics" Click="Navigate_Click"/>
-          <Border Height="1" Background="#304638" Margin="12,22"/>
-          <Button x:Name="NavConnection" Style="{StaticResource Nav}" Content="Connexion" Tag="Connection" Click="Navigate_Click"/>
-        </StackPanel>
-      </DockPanel>
-    </Border>
-    <Grid Grid.Column="1" Margin="35,29,35,22">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <Grid Margin="0,0,0,27"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <StackPanel><TextBlock Text="POKÉMON ÉCLAT" Style="{StaticResource Label}" FontSize="10"/><TextBlock x:Name="PageTitle" Text="Vue d’ensemble" FontSize="28" FontWeight="SemiBold"/></StackPanel>
-        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock x:Name="EndpointText" Text="Aucun serveur configuré" FontSize="12" Foreground="{StaticResource Muted}" TextAlignment="Right"/><TextBlock x:Name="UpdatedText" Text="En attente de connexion" FontSize="11" Foreground="{StaticResource Muted}" TextAlignment="Right" Margin="0,5,0,0"/></StackPanel>
+        <Ellipse Grid.Column="2" Width="8" Height="8" Fill="{StaticResource Success}" VerticalAlignment="Center"/>
       </Grid>
-      <Border x:Name="MessageBar" Grid.Row="1" Visibility="Collapsed" CornerRadius="5" Background="#FFF0D6" Padding="15,12" Margin="0,0,0,18"><TextBlock x:Name="MessageText" Foreground="#6C4A16"/></Border>
-      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="0,0,9,0">
-          <StackPanel x:Name="OverviewPage">
-            <Border Style="{StaticResource Card}" Padding="28" Margin="0,0,0,20">
-              <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel><TextBlock Text="SERVEUR DE JEU" Style="{StaticResource Label}" FontSize="10"/><StackPanel Orientation="Horizontal" Margin="0,3,0,9"><Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#9BA39B" Margin="0,0,12,0"/><TextBlock x:Name="ServerStatus" Text="Connexion à établir" FontSize="25" FontWeight="SemiBold"/></StackPanel><TextBlock x:Name="StatusDetail" Text="Configurez le compte SSH pour consulter le serveur." Foreground="{StaticResource Muted}" MaxWidth="550" LineHeight="21"/><TextBlock x:Name="NetworkText" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,9,0,0"/></StackPanel>
-                <Button Grid.Column="1" Content="Actualiser" Click="Refresh_Click" VerticalAlignment="Center" Margin="20,0,0,0"/>
-              </Grid>
-            </Border>
-            <UniformGrid Columns="3" Margin="0,0,0,22">
-              <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Joueurs connectés" Style="{StaticResource Label}"/><TextBlock x:Name="PlayersValue" Text="—" FontSize="33"/><TextBlock x:Name="RoomsValue" Text="Salons : —" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
-              <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Réponse du jeu" Style="{StaticResource Label}"/><TextBlock x:Name="LatencyValue" Text="—" FontSize="33"/><TextBlock Text="Mesurée depuis le VPS" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
-              <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Mémoire du VPS" Style="{StaticResource Label}"/><TextBlock x:Name="MemoryValue" Text="—" FontSize="33"/><TextBlock x:Name="MemoryDetail" Text="Consommation totale" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
-            </UniformGrid>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,20"><StackPanel><TextBlock Text="Commandes du service" Style="{StaticResource Section}"/><TextBlock Text="Les arrêts et redémarrages interrompent les parties en cours." Foreground="{StaticResource Muted}" Margin="0,0,0,20"/><WrapPanel><Button Content="Démarrer" Style="{StaticResource Primary}" Tag="start" Click="Service_Click" Margin="0,0,10,0"/><Button Content="Redémarrer…" Tag="restart" Click="Service_Click" Margin="0,0,10,0"/><Button Content="Arrêter…" Tag="stop" Click="Service_Click" Foreground="#8C3E31"/></WrapPanel></StackPanel></Border>
-            <Border BorderBrush="#D7DDD3" BorderThickness="0,1,0,0" Padding="0,18,0,0"><TextBlock Text="L’état du service et la réponse du jeu sont contrôlés séparément. Un processus actif peut ne plus accepter les joueurs." FontSize="12" Foreground="{StaticResource Muted}" LineHeight="20"/></Border>
-          </StackPanel>
-          <StackPanel x:Name="SessionsPage" Visibility="Collapsed">
-            <TextBlock Text="Activité en cours" Style="{StaticResource Section}"/>
-            <TextBlock Text="Informations remontées par le serveur. Actualisez pour suivre les connexions." Foreground="{StaticResource Muted}" Margin="0,0,0,20"/>
-            <Button Content="Actualiser l’activité" Click="Refresh_Click" HorizontalAlignment="Left" Margin="0,0,0,18"/>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,18"><StackPanel><TextBlock Text="Joueurs" Style="{StaticResource Section}"/><ItemsControl x:Name="PlayerItems"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#E3E6DF" BorderThickness="0,0,0,1" Padding="0,12"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,5,0,0"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,18"><StackPanel><TextBlock Text="Salons" Style="{StaticResource Section}"/><ItemsControl x:Name="RoomItems"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#E3E6DF" BorderThickness="0,0,0,1" Padding="0,12"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,5,0,0"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
-            <Expander Header="Détails de l’activité"><TextBox x:Name="SessionsText" IsReadOnly="True" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" Background="Transparent" Margin="0,15,0,0"/></Expander>
-          </StackPanel>
-          <Grid x:Name="LogsPage" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <StackPanel Margin="0,0,0,18"><TextBlock Text="Dernières lignes du service" Style="{StaticResource Section}"/><Button Content="Recharger les journaux" Click="Logs_Click" HorizontalAlignment="Left"/></StackPanel>
-            <TextBox x:Name="LogsText" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" Background="#1C2C25" Foreground="#D9E4DA" Padding="22" BorderThickness="0" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Height="450"/>
+    </DataTemplate>
+  </Window.Resources>
+
+  <Grid x:Name="Root" Background="{StaticResource Bg0}">
+    <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition/></Grid.RowDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="252"/><ColumnDefinition/></Grid.ColumnDefinitions>
+
+    <!-- Title bar -->
+    <Border Grid.ColumnSpan="2" Background="{StaticResource Bg1}"/>
+    <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
+      <Path Data="M7,0 L14,7 L7,18 L0,7 Z" Fill="{StaticResource Crystal}" Width="11" Height="14" Stretch="Fill" VerticalAlignment="Center"/>
+      <TextBlock Text="Éclat" FontWeight="SemiBold" FontSize="13" Margin="10,0,6,0" VerticalAlignment="Center"/>
+      <TextBlock Text="Administration" Foreground="{StaticResource Faint}" FontSize="13" VerticalAlignment="Center"/>
+    </StackPanel>
+    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
+      <Button Style="{StaticResource Caption}" Content="&#xE921;" Click="Minimize_Click" ToolTip="Réduire"/>
+      <Button x:Name="MaximizeButton" Style="{StaticResource Caption}" Content="&#xE922;" Click="Maximize_Click" ToolTip="Agrandir"/>
+      <Button Style="{StaticResource CaptionClose}" Content="&#xE8BB;" Click="Close_Click" ToolTip="Fermer"/>
+    </StackPanel>
+    <Border x:Name="BusyBar" Grid.ColumnSpan="2" Height="2" VerticalAlignment="Bottom" ClipToBounds="True" Visibility="Hidden">
+      <Border x:Name="BusySweep" Width="360" HorizontalAlignment="Left">
+        <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
+        <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#005EE6FF" Offset="0"/><GradientStop Color="#5EE6FF" Offset="0.5"/><GradientStop Color="#008B7BFF" Offset="1"/></LinearGradientBrush></Border.Background>
+      </Border>
+    </Border>
+
+    <!-- Sidebar -->
+    <Border Grid.Row="1" Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel Margin="16,14,16,18">
+        <Border DockPanel.Dock="Top" Background="#121A38" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="14,12" Margin="0,0,0,22">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <Grid Width="12" Height="12" VerticalAlignment="Center">
+              <Ellipse x:Name="SideHalo" Fill="{StaticResource Faint}" Opacity="0.35" Width="12" Height="12"/>
+              <Ellipse x:Name="SideDot" Fill="{StaticResource Faint}" Width="7" Height="7"/>
+            </Grid>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+              <TextBlock x:Name="EndpointText" Text="Aucun serveur" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+              <TextBlock x:Name="SideStatus" Text="Non connecté" Style="{StaticResource Hint}" FontSize="12"/>
+            </StackPanel>
           </Grid>
-          <StackPanel x:Name="BackupsPage" Visibility="Collapsed">
-            <TextBlock Text="Sauvegardes du serveur" Style="{StaticResource Section}"/>
-            <TextBlock Text="Les instantanés restent sur le VPS. Téléchargez une copie de la base sur votre PC pour conserver une sauvegarde indépendante." Foreground="{StaticResource Muted}" LineHeight="21" Margin="0,0,0,22"/>
-            <WrapPanel Margin="0,0,0,22"><Button Content="Créer une sauvegarde" Style="{StaticResource Primary}" Click="CreateBackup_Click" Margin="0,0,10,0"/><Button Content="Actualiser la liste" Click="Backups_Click"/></WrapPanel>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,20"><StackPanel><TextBlock Text="Instantané" Style="{StaticResource Label}"/><ComboBox x:Name="BackupList" DisplayMemberPath="Label" MinHeight="42"/><TextBlock x:Name="BackupDetail" Text="Aucune liste chargée." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,12,0,20"/><WrapPanel><Button Content="Télécharger la base…" Click="Download_Click" Margin="0,0,10,0"/><Button Content="Restaurer…" Click="Restore_Click" Foreground="#8C3E31"/></WrapPanel></StackPanel></Border>
-            <TextBlock Text="Une restauration remplace les données actuelles. Une copie de retour arrière est créée par le serveur avant la remise en place de la base." Foreground="{StaticResource Muted}" FontSize="12" LineHeight="20"/>
-          </StackPanel>
-          <StackPanel x:Name="DiagnosticsPage" Visibility="Collapsed"><TextBlock Text="Service et machine" Style="{StaticResource Section}"/><Button Content="Lancer le diagnostic" Click="Diagnostics_Click" HorizontalAlignment="Left" Margin="0,0,0,18"/><Border Style="{StaticResource Card}"><TextBox x:Name="DiagnosticsText" IsReadOnly="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" BorderThickness="0" MinHeight="380" Background="Transparent"/></Border></StackPanel>
-          <StackPanel x:Name="ConnectionPage" Visibility="Collapsed">
-            <TextBlock Text="Accès au VPS" Style="{StaticResource Section}"/>
-            <TextBlock Text="Utilisez le compte d’administration dédié et sa clé privée. Ces réglages sont enregistrés uniquement sur ce PC." Foreground="{StaticResource Muted}" LineHeight="21" Margin="0,0,0,22"/>
-            <Border Style="{StaticResource Card}"><StackPanel>
-              <Grid Margin="0,0,0,18"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,15,0"><TextBlock Text="Adresse du serveur" Style="{StaticResource Label}"/><TextBox x:Name="HostBox" AutomationProperties.Name="Adresse du serveur"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="Port SSH" Style="{StaticResource Label}"/><TextBox x:Name="PortBox" AutomationProperties.Name="Port SSH"/></StackPanel></Grid>
-              <TextBlock Text="Compte SSH" Style="{StaticResource Label}"/><TextBox x:Name="UserBox" Margin="0,0,0,18" AutomationProperties.Name="Compte SSH"/>
-              <TextBlock Text="Clé privée" Style="{StaticResource Label}"/><Grid Margin="0,0,0,20"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="KeyBox" AutomationProperties.Name="Chemin de la clé privée"/><Button Grid.Column="1" Content="Parcourir…" Click="BrowseKey_Click" Margin="10,0,0,0"/></Grid>
-              <WrapPanel><Button Content="Vérifier l’empreinte…" Click="Trust_Click" Margin="0,0,10,0"/><Button Content="Enregistrer et connecter" Style="{StaticResource Primary}" Click="SaveConnection_Click"/></WrapPanel>
-            </StackPanel></Border>
-            <TextBlock Text="Comparez l’empreinte présentée à celle de la console de votre hébergeur avant de l’accepter. Une clé chiffrée doit être chargée dans l’agent OpenSSH de Windows." Foreground="{StaticResource Muted}" FontSize="12" LineHeight="20" Margin="0,20,0,0"/>
-            <TextBlock Text="Aucun mot de passe n’est enregistré par l’application." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,12,0,0"/>
+        </Border>
+
+        <StackPanel DockPanel.Dock="Bottom">
+          <Border Height="1" Background="{StaticResource Line}" Margin="0,0,0,16"/>
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <local:ArcGauge x:Name="RefreshRing" Width="30" Height="30" Thickness="3"/>
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="Actualisation automatique" FontSize="12" FontWeight="SemiBold"/>
+              <TextBlock x:Name="UpdatedText" Text="En attente" Style="{StaticResource Hint}" FontSize="11.5"/>
+            </StackPanel>
+          </Grid>
+          <Border x:Name="ModeBadge" Visibility="Collapsed" Margin="0,16,0,0" Background="#2A2410" BorderBrush="#5A4A1A" BorderThickness="1" CornerRadius="8" Padding="10,7">
+            <TextBlock Text="DÉMONSTRATION · données fictives" Foreground="{StaticResource Warning}" FontSize="11" FontWeight="SemiBold"/>
+          </Border>
+          <TextBlock Text="Le serveur continue de tourner quand cette fenêtre est fermée." Style="{StaticResource Hint}" FontSize="11.5" Margin="0,14,0,0" Foreground="{StaticResource Faint}"/>
+        </StackPanel>
+
+        <Grid>
+          <Canvas x:Name="NavCanvas" IsHitTestVisible="False">
+            <Border x:Name="NavPill" Height="44" CornerRadius="10" Background="{StaticResource CrystalSoft}" Width="{Binding ActualWidth, ElementName=NavList}">
+              <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
+              <Border Width="3" Height="20" CornerRadius="2" Background="{StaticResource Crystal}" HorizontalAlignment="Left" Margin="0,0,0,0"/>
+            </Border>
+          </Canvas>
+          <StackPanel x:Name="NavList">
+            <TextBlock Text="SUPERVISION" Style="{StaticResource Overline}" Margin="14,0,0,8"/>
+            <RadioButton x:Name="NavOverview" Style="{StaticResource NavItem}" Tag="Overview" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE80F;" FontSize="15" Width="28"/><TextBlock Text="Vue d’ensemble" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <RadioButton x:Name="NavSessions" Style="{StaticResource NavItem}" Tag="Sessions" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="15" Width="28"/><TextBlock Text="Joueurs et salons" FontSize="13.5" FontWeight="SemiBold"/><Border x:Name="PlayersBadge" Background="{StaticResource Crystal}" CornerRadius="9" Padding="7,1" Margin="10,0,0,0" Visibility="Collapsed"><TextBlock x:Name="PlayersBadgeText" Foreground="#0A0F1F" FontSize="11" FontWeight="Bold"/></Border></StackPanel></RadioButton>
+            <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" Tag="Logs" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" FontSize="15" Width="28"/><TextBlock Text="Journaux" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <TextBlock Text="MAINTENANCE" Style="{StaticResource Overline}" Margin="14,18,0,8"/>
+            <RadioButton x:Name="NavBackups" Style="{StaticResource NavItem}" Tag="Backups" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE81C;" FontSize="15" Width="28"/><TextBlock Text="Sauvegardes" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" Tag="Diagnostics" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE9D9;" FontSize="15" Width="28"/><TextBlock Text="Diagnostic" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <RadioButton x:Name="NavConnection" Style="{StaticResource NavItem}" Tag="Connection" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE703;" FontSize="15" Width="28"/><TextBlock Text="Connexion" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
           </StackPanel>
         </Grid>
-      </ScrollViewer>
-      <Grid Grid.Row="3" Margin="0,22,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ActivityText" Text="Prêt" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock Text="Éclat · 1.0" Grid.Column="1" Foreground="#92998E" FontSize="11"/></Grid>
+      </DockPanel>
+    </Border>
+
+    <!-- Main area -->
+    <Grid Grid.Row="1" Grid.Column="1" Margin="34,26,34,22">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+      <Grid Margin="0,0,0,22">
+        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock x:Name="PageOverline" Text="SERVEUR ÉCLAT" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
+          <TextBlock x:Name="PageTitle" Text="Vue d’ensemble" FontSize="30" FontWeight="SemiBold"/>
+          <TextBlock x:Name="PageSubtitle" Style="{StaticResource Hint}" FontSize="13" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock x:Name="ActivityText" Text="Prêt" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,16,0" TextWrapping="NoWrap"/>
+          <Button x:Name="RefreshButton" Click="Refresh_Click" ToolTip="Actualiser maintenant">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock x:Name="RefreshIcon" Style="{StaticResource Icon}" Text="&#xE72C;" FontSize="13" RenderTransformOrigin="0.5,0.5"><TextBlock.RenderTransform><RotateTransform/></TextBlock.RenderTransform></TextBlock>
+              <TextBlock Text="Actualiser" Margin="8,0,0,0"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <Grid x:Name="PageHost" Grid.Row="1">
+        <!-- Overview -->
+        <ScrollViewer x:Name="OverviewPage" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="0,0,6,8">
+            <Border Style="{StaticResource CardBox}" Padding="26" Margin="0,0,0,18">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#18244C" Offset="0"/><GradientStop Color="#141C3A" Offset="0.55"/><GradientStop Color="#1C1A44" Offset="1"/></LinearGradientBrush>
+              </Border.Background>
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid Width="96" Height="96" VerticalAlignment="Center">
+                  <Ellipse x:Name="Halo" Width="96" Height="96" Opacity="0.4"><Ellipse.Fill><RadialGradientBrush><GradientStop x:Name="HaloColor" Color="#5559638C" Offset="0"/><GradientStop Color="#0059638C" Offset="1"/></RadialGradientBrush></Ellipse.Fill></Ellipse>
+                  <Ellipse x:Name="PulseRing" Width="56" Height="56" StrokeThickness="2" Stroke="{StaticResource Faint}" RenderTransformOrigin="0.5,0.5" Opacity="0"><Ellipse.RenderTransform><ScaleTransform/></Ellipse.RenderTransform></Ellipse>
+                  <Ellipse x:Name="Orb" Width="56" Height="56" Fill="{StaticResource Faint}"/>
+                  <TextBlock x:Name="OrbIcon" Style="{StaticResource Icon}" Text="&#xE703;" FontSize="22" Foreground="#0A0F1F" HorizontalAlignment="Center"/>
+                </Grid>
+                <StackPanel Grid.Column="1" Margin="24,0,20,0" VerticalAlignment="Center">
+                  <TextBlock Text="SERVEUR DE JEU" Style="{StaticResource Overline}"/>
+                  <TextBlock x:Name="ServerStatus" Text="Connexion à établir" FontSize="28" FontWeight="SemiBold"/>
+                  <TextBlock x:Name="StatusDetail" Text="Configurez le compte SSH pour consulter le serveur." Style="{StaticResource Hint}" FontSize="13.5" Margin="0,6,0,14" MaxWidth="620" HorizontalAlignment="Left"/>
+                  <WrapPanel x:Name="StatusChips"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" MinWidth="170">
+                  <Button x:Name="StartButton" Style="{StaticResource Primary}" Tag="start" Click="Service_Click" Margin="0,0,0,10"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE768;" Margin="0,0,8,0"/><TextBlock Text="Démarrer"/></StackPanel></Button>
+                  <Button x:Name="RestartButton" Tag="restart" Click="Service_Click" Margin="0,0,0,10"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE895;" Margin="0,0,8,0"/><TextBlock Text="Redémarrer…"/></StackPanel></Button>
+                  <Button x:Name="StopButton" Style="{StaticResource DangerButton}" Tag="stop" Click="Service_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE71A;" Margin="0,0,8,0"/><TextBlock Text="Arrêter…"/></StackPanel></Button>
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <UniformGrid Columns="4" Margin="0,0,0,18">
+              <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="20,18">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal"><Border Width="30" Height="30" CornerRadius="9" Background="#1A3550"><TextBlock Style="{StaticResource Icon}" Text="&#xE716;" Foreground="{StaticResource Cyan}" HorizontalAlignment="Center" FontSize="13"/></Border><TextBlock Text="Joueurs connectés" Style="{StaticResource Hint}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                  <local:CountUpText x:Name="PlayersValue" Text="—" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                  <local:Sparkline x:Name="PlayersSpark" Height="34" Margin="0,8,0,0"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="20,18">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal"><Border Width="30" Height="30" CornerRadius="9" Background="#2A2550"><TextBlock Style="{StaticResource Icon}" Text="&#xE80F;" Foreground="{StaticResource Violet}" HorizontalAlignment="Center" FontSize="13"/></Border><TextBlock Text="Salons ouverts" Style="{StaticResource Hint}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                  <local:CountUpText x:Name="RoomsValue" Text="—" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                  <local:Sparkline x:Name="RoomsSpark" Height="34" Margin="0,8,0,0" Color="#8B7BFF"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource CardBox}" Margin="0,0,14,0" Padding="20,18">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal"><Border Width="30" Height="30" CornerRadius="9" Background="#163A35"><TextBlock Style="{StaticResource Icon}" Text="&#xEC4A;" Foreground="{StaticResource Success}" HorizontalAlignment="Center" FontSize="13"/></Border><TextBlock Text="Réponse du jeu" Style="{StaticResource Hint}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                  <local:CountUpText x:Name="LatencyValue" Text="—" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0" Format="0.0" Suffix=" ms"/>
+                  <local:Sparkline x:Name="LatencySpark" Height="34" Margin="0,8,0,0" Color="#3DDC97"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource CardBox}" Padding="20,18">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal"><Border Width="30" Height="30" CornerRadius="9" Background="#3A2E18"><TextBlock Style="{StaticResource Icon}" Text="&#xE823;" Foreground="{StaticResource Warning}" HorizontalAlignment="Center" FontSize="13"/></Border><TextBlock Text="Jeu en ligne depuis" Style="{StaticResource Hint}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel>
+                  <TextBlock x:Name="UptimeValue" Text="—" FontSize="34" FontWeight="SemiBold" Margin="0,12,0,0" TextWrapping="NoWrap"/>
+                  <TextBlock x:Name="UptimeDetail" Text="VPS : —" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                </StackPanel>
+              </Border>
+            </UniformGrid>
+
+            <Grid Margin="0,0,0,18">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="1.35*"/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Border Style="{StaticResource CardBox}">
+                <StackPanel>
+                  <Grid Margin="0,0,0,16"><TextBlock Text="Ressources du VPS" Style="{StaticResource CardTitle}"/><TextBlock x:Name="HostText" Style="{StaticResource Hint}" HorizontalAlignment="Right" TextWrapping="NoWrap"/></Grid>
+                  <UniformGrid Columns="3">
+                    <StackPanel HorizontalAlignment="Center">
+                      <Grid Width="118" Height="118"><local:ArcGauge x:Name="MemoryGauge" Thickness="11"/><StackPanel VerticalAlignment="Center"><TextBlock x:Name="MemoryPercent" Text="—" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="mémoire" Style="{StaticResource Hint}" FontSize="11" HorizontalAlignment="Center"/></StackPanel></Grid>
+                      <TextBlock x:Name="MemoryDetail" Text="—" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center">
+                      <Grid Width="118" Height="118"><local:ArcGauge x:Name="DiskGauge" Thickness="11"/><StackPanel VerticalAlignment="Center"><TextBlock x:Name="DiskPercent" Text="—" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="disque" Style="{StaticResource Hint}" FontSize="11" HorizontalAlignment="Center"/></StackPanel></Grid>
+                      <TextBlock x:Name="DiskDetail" Text="—" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center">
+                      <Grid Width="118" Height="118"><local:ArcGauge x:Name="ProcessGauge" Thickness="11"/><StackPanel VerticalAlignment="Center"><TextBlock x:Name="ProcessValue" Text="—" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="jeu (Mo)" Style="{StaticResource Hint}" FontSize="11" HorizontalAlignment="Center"/></StackPanel></Grid>
+                      <TextBlock x:Name="ProcessDetail" Text="—" Style="{StaticResource Hint}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                  </UniformGrid>
+                  <Border Height="1" Background="{StaticResource Line}" Margin="0,18,0,14"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Charge moyenne" Style="{StaticResource Hint}"/><TextBlock x:Name="LoadText" Text="—" FontWeight="SemiBold" FontFamily="{StaticResource Mono}" Margin="0,4,0,0"/></StackPanel>
+                    <local:Sparkline x:Name="LoadSpark" Grid.Column="1" Height="38" Margin="22,0,0,0" Color="#FFB547"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="2" Style="{StaticResource CardBox}">
+                <DockPanel>
+                  <Grid DockPanel.Dock="Top" Margin="0,0,0,16"><TextBlock Text="En ligne maintenant" Style="{StaticResource CardTitle}"/><Button Style="{StaticResource Ghost}" Content="Tout voir →" HorizontalAlignment="Right" Click="SeeSessions_Click" Padding="6,2"/></Grid>
+                  <Grid>
+                    <ItemsControl x:Name="OnlinePlayers" ItemTemplate="{StaticResource PlayerRow}"/>
+                    <StackPanel x:Name="OnlineEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,20">
+                      <TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="30" Foreground="{StaticResource Faint}" HorizontalAlignment="Center"/>
+                      <TextBlock x:Name="OnlineEmptyText" Text="Personne pour l’instant" Style="{StaticResource Hint}" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                  </Grid>
+                </DockPanel>
+              </Border>
+            </Grid>
+
+            <Border Style="{StaticResource CardBox}" Padding="22,18">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="Connexions" Style="{StaticResource Hint}"/><local:CountUpText x:Name="CounterConnections" Text="—" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="1"><TextBlock Text="Déconnexions" Style="{StaticResource Hint}"/><local:CountUpText x:Name="CounterDisconnections" Text="—" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="2"><TextBlock Text="Salons créés" Style="{StaticResource Hint}"/><local:CountUpText x:Name="CounterRooms" Text="—" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="3"><TextBlock Text="Entrées en salon" Style="{StaticResource Hint}"/><local:CountUpText x:Name="CounterJoins" Text="—" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="4"><TextBlock Text="Erreurs" Style="{StaticResource Hint}"/><local:CountUpText x:Name="CounterErrors" Text="—" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="5"><TextBlock Text="Dernier incident" Style="{StaticResource Hint}"/><TextBlock x:Name="LastErrorText" Text="—" FontSize="13.5" FontWeight="SemiBold" Margin="0,7,0,0"/></StackPanel>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Players and rooms -->
+        <ScrollViewer x:Name="SessionsPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+          <StackPanel Margin="0,0,6,8">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="1.5*"/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Salons" Style="{StaticResource CardTitle}" Margin="0,0,0,14"/>
+                <ItemsControl x:Name="RoomCards">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Border Style="{StaticResource CardBox}" Margin="0,0,14,14" Padding="18">
+                        <StackPanel>
+                          <Grid>
+                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,80,0"/>
+                            <Border Background="{Binding BadgeBackground}" CornerRadius="999" Padding="9,3" HorizontalAlignment="Right"><TextBlock Text="{Binding Visibility}" Foreground="{Binding BadgeForeground}" FontSize="11" FontWeight="SemiBold"/></Border>
+                          </Grid>
+                          <TextBlock Text="{Binding Members}" Style="{StaticResource Hint}" Margin="0,8,0,12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                          <Grid>
+                            <Border Height="6" CornerRadius="3" Background="#222D58"/>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="{Binding FillStar}"/><ColumnDefinition Width="{Binding RestStar}"/></Grid.ColumnDefinitions><Border Height="6" CornerRadius="3" Background="{StaticResource Crystal}"/></Grid>
+                          </Grid>
+                          <TextBlock Text="{Binding Occupancy}" Style="{StaticResource Hint}" FontSize="12" Margin="0,8,0,0"/>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border x:Name="RoomsEmpty" Style="{StaticResource CardBox}" Margin="0,0,14,14" Padding="30" Visibility="Collapsed">
+                  <StackPanel HorizontalAlignment="Center"><TextBlock Style="{StaticResource Icon}" Text="&#xE80F;" FontSize="30" Foreground="{StaticResource Faint}" HorizontalAlignment="Center"/><TextBlock x:Name="RoomsEmptyText" Text="Aucun salon ouvert" Style="{StaticResource Hint}" Margin="0,10,0,0" HorizontalAlignment="Center"/></StackPanel>
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="Joueurs" Style="{StaticResource CardTitle}" Margin="0,0,0,14"/>
+                <Border Style="{StaticResource CardBox}">
+                  <Grid>
+                    <ItemsControl x:Name="PlayerList" ItemTemplate="{StaticResource PlayerRow}"/>
+                    <StackPanel x:Name="PlayersEmpty" HorizontalAlignment="Center" Margin="0,16" Visibility="Collapsed"><TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="30" Foreground="{StaticResource Faint}" HorizontalAlignment="Center"/><TextBlock x:Name="PlayersEmptyText" Text="Aucun joueur connecté" Style="{StaticResource Hint}" Margin="0,10,0,0" HorizontalAlignment="Center"/></StackPanel>
+                  </Grid>
+                </Border>
+              </StackPanel>
+            </Grid>
+            <ToggleButton x:Name="RawSessionsToggle" Style="{StaticResource Switch}" Content="Afficher les données brutes" Margin="0,8,0,12" HorizontalAlignment="Left" Checked="RawSessions_Changed" Unchecked="RawSessions_Changed"/>
+            <Border x:Name="RawSessionsBox" Style="{StaticResource CardBox}" Background="#0B1126" Visibility="Collapsed"><TextBox x:Name="SessionsText" IsReadOnly="True" BorderThickness="0" Background="Transparent" FontFamily="{StaticResource Mono}" FontSize="12" TextWrapping="Wrap" Padding="0"/></Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Logs -->
+        <Grid x:Name="LogsPage" Visibility="Collapsed">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+          <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="320"/><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Grid>
+              <TextBox x:Name="LogSearch" Padding="36,10,12,10" TextChanged="LogFilter_Changed" AutomationProperties.Name="Rechercher dans les journaux"/>
+              <TextBlock Style="{StaticResource Icon}" Text="&#xE721;" Foreground="{StaticResource Faint}" Margin="13,0,0,0" IsHitTestVisible="False"/>
+              <TextBlock x:Name="LogSearchHint" Text="Rechercher…" Foreground="{StaticResource Faint}" Margin="37,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+            </Grid>
+            <Border Grid.Column="1" Background="#121A38" CornerRadius="10" Padding="3" Margin="12,0,0,0" BorderBrush="{StaticResource Line}" BorderThickness="1">
+              <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="LogAll" Style="{StaticResource Segment}" Content="Tout" IsChecked="True" GroupName="LogLevel" Checked="LogFilter_Changed"/>
+                <RadioButton x:Name="LogWarn" Style="{StaticResource Segment}" Content="Avertissements" GroupName="LogLevel" Checked="LogFilter_Changed"/>
+                <RadioButton x:Name="LogError" Style="{StaticResource Segment}" Content="Erreurs" GroupName="LogLevel" Checked="LogFilter_Changed"/>
+              </StackPanel>
+            </Border>
+            <TextBlock x:Name="LogCount" Grid.Column="2" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="16,0,0,0" TextWrapping="NoWrap"/>
+            <Button Grid.Column="3" Click="Logs_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" Margin="0,0,8,0"/><TextBlock Text="Recharger"/></StackPanel></Button>
+          </Grid>
+          <Border Grid.Row="1" Background="#0A1024" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="14" Padding="6">
+            <ListBox x:Name="LogLines" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+              <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="B" Background="Transparent" CornerRadius="6" Padding="10,4"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Background" Value="#121B3A"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+              </ListBox.ItemContainerStyle>
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="78"/><ColumnDefinition Width="54"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Time}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{StaticResource Faint}" TextWrapping="NoWrap"/>
+                    <Border Grid.Column="1" Background="{Binding LevelBackground}" CornerRadius="4" Padding="5,0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,1,0,0"><TextBlock Text="{Binding Level}" Foreground="{Binding LevelForeground}" FontFamily="{StaticResource Mono}" FontSize="10.5" FontWeight="Bold"/></Border>
+                    <TextBlock Grid.Column="2" Text="{Binding Message}" FontFamily="{StaticResource Mono}" FontSize="12" Foreground="{Binding MessageForeground}"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+        </Grid>
+
+        <!-- Backups -->
+        <ScrollViewer x:Name="BackupsPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+          <StackPanel Margin="0,0,6,8">
+            <Border Style="{StaticResource CardBox}" Margin="0,0,0,18">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="Instantanés sur le VPS" Style="{StaticResource Hint}"/><local:CountUpText x:Name="BackupCount" Text="—" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="1"><TextBlock Text="Espace occupé" Style="{StaticResource Hint}"/><TextBlock x:Name="BackupSize" Text="—" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="2"><TextBlock Text="Dernière sauvegarde" Style="{StaticResource Hint}"/><TextBlock x:Name="BackupLatest" Text="—" FontSize="28" FontWeight="SemiBold" Margin="0,4,0,0"/></StackPanel>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Button Click="Backups_Click" Margin="0,0,10,0"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE72C;" Margin="0,0,8,0"/><TextBlock Text="Actualiser"/></StackPanel></Button>
+                  <Button Style="{StaticResource Primary}" Click="CreateBackup_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE710;" Margin="0,0,8,0"/><TextBlock Text="Créer une sauvegarde"/></StackPanel></Button>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <ItemsControl x:Name="BackupRows">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Style="{StaticResource CardBox}" Margin="0,0,0,10" Padding="18,14">
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                      <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource CrystalSoft}"><TextBlock Style="{StaticResource Icon}" Text="&#xE81C;" Foreground="{StaticResource Cyan}" HorizontalAlignment="Center" FontSize="17"/></Border>
+                      <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal"><TextBlock Text="{Binding When}" FontWeight="SemiBold" FontSize="14.5"/><Border Background="#163A35" CornerRadius="999" Padding="8,1" Margin="10,0,0,0" Visibility="{Binding LatestVisibility}"><TextBlock Text="la plus récente" Foreground="{StaticResource Success}" FontSize="11" FontWeight="SemiBold"/></Border></StackPanel>
+                        <TextBlock Text="{Binding Name}" FontFamily="{StaticResource Mono}" FontSize="11.5" Foreground="{StaticResource Faint}" Margin="0,4,0,0" TextWrapping="NoWrap"/>
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding SizeText}" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="16,0,22,0" TextWrapping="NoWrap"/>
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Tag="{Binding}" Click="Download_Click" Margin="0,0,8,0" ToolTip="Télécharger une copie vérifiée sur ce PC"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE896;" Margin="0,0,8,0"/><TextBlock Text="Télécharger"/></StackPanel></Button>
+                        <Button Tag="{Binding}" Style="{StaticResource DangerButton}" Click="Restore_Click" ToolTip="Remplacer les données actuelles"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE7A7;" Margin="0,0,8,0"/><TextBlock Text="Restaurer…"/></StackPanel></Button>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Border x:Name="BackupsEmpty" Style="{StaticResource CardBox}" Padding="34" Visibility="Collapsed">
+              <StackPanel HorizontalAlignment="Center"><TextBlock Style="{StaticResource Icon}" Text="&#xE81C;" FontSize="32" Foreground="{StaticResource Faint}" HorizontalAlignment="Center"/><TextBlock x:Name="BackupsEmptyText" Text="Aucun instantané sur le VPS" Style="{StaticResource Hint}" Margin="0,10,0,0" HorizontalAlignment="Center"/></StackPanel>
+            </Border>
+            <Border Background="#121A38" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="16,13" Margin="0,8,0,0">
+              <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE83D;" Foreground="{StaticResource Cyan}" Margin="0,0,12,0"/><TextBlock Style="{StaticResource Hint}" Text="Chaque téléchargement est vérifié par SHA-256. Une restauration crée d’abord une copie de retour arrière sur le serveur ; gardez aussi une copie hors du VPS." MaxWidth="900"/></StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Diagnostics -->
+        <ScrollViewer x:Name="DiagnosticsPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+          <StackPanel Margin="0,0,6,8">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+              <Button Style="{StaticResource Primary}" Click="Diagnostics_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE9D9;" Margin="0,0,8,0"/><TextBlock Text="Lancer le diagnostic"/></StackPanel></Button>
+              <ToggleButton x:Name="RawDiagnosticsToggle" Style="{StaticResource Switch}" Content="Données brutes" Margin="20,0,0,0" Checked="RawDiagnostics_Changed" Unchecked="RawDiagnostics_Changed"/>
+            </StackPanel>
+            <ItemsControl x:Name="DiagnosticSections">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Style="{StaticResource CardBox}" Margin="0,0,14,14" Padding="20,18">
+                    <StackPanel>
+                      <StackPanel Orientation="Horizontal" Margin="0,0,0,12"><TextBlock Style="{StaticResource Icon}" Text="{Binding Icon}" Foreground="{StaticResource Cyan}" Margin="0,0,10,0"/><TextBlock Text="{Binding Title}" Style="{StaticResource CardTitle}" FontSize="15"/></StackPanel>
+                      <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                              <TextBlock Text="{Binding Key}" Style="{StaticResource Hint}"/>
+                              <TextBlock Grid.Column="1" Text="{Binding Value}" Foreground="{Binding Tone}" FontWeight="SemiBold" FontSize="13" TextAlignment="Right"/>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Border x:Name="DiagnosticsEmpty" Style="{StaticResource CardBox}" Padding="34">
+              <StackPanel HorizontalAlignment="Center"><TextBlock Style="{StaticResource Icon}" Text="&#xE9D9;" FontSize="32" Foreground="{StaticResource Faint}" HorizontalAlignment="Center"/><TextBlock Text="Lancez un diagnostic pour inspecter le service, la machine et le journal." Style="{StaticResource Hint}" Margin="0,10,0,0" HorizontalAlignment="Center"/></StackPanel>
+            </Border>
+            <Border x:Name="RawDiagnosticsBox" Style="{StaticResource CardBox}" Background="#0B1126" Visibility="Collapsed" Margin="0,4,0,0"><TextBox x:Name="DiagnosticsText" IsReadOnly="True" BorderThickness="0" Background="Transparent" FontFamily="{StaticResource Mono}" FontSize="12" TextWrapping="Wrap" Padding="0"/></Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- Connection -->
+        <ScrollViewer x:Name="ConnectionPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+          <Grid Margin="0,0,6,8">
+            <Grid.ColumnDefinitions><ColumnDefinition MaxWidth="760"/><ColumnDefinition Width="22"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
+            <StackPanel>
+              <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                  <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="1" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel Grid.Column="1" Margin="18,4,0,0">
+                    <TextBlock Text="Serveur" Style="{StaticResource CardTitle}"/>
+                    <TextBlock Text="Adresse du VPS et compte d’administration dédié." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
+                      <StackPanel><TextBlock Text="ADRESSE" Style="{StaticResource Overline}"/><TextBox x:Name="HostBox" AutomationProperties.Name="Adresse du serveur"/></StackPanel>
+                      <StackPanel Grid.Column="2"><TextBlock Text="PORT SSH" Style="{StaticResource Overline}"/><TextBox x:Name="PortBox" AutomationProperties.Name="Port SSH"/></StackPanel>
+                    </Grid>
+                    <TextBlock Text="COMPTE SSH" Style="{StaticResource Overline}"/><TextBox x:Name="UserBox" AutomationProperties.Name="Compte SSH"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+              <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                  <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="2" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel Grid.Column="1" Margin="18,4,0,0">
+                    <TextBlock Text="Clé privée" Style="{StaticResource CardTitle}"/>
+                    <TextBlock Text="Seul son chemin est enregistré, jamais son contenu. Une clé chiffrée se charge dans l’agent OpenSSH (ssh-add)." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="KeyBox" AutomationProperties.Name="Chemin de la clé privée"/><Button Grid.Column="1" Content="Parcourir…" Click="BrowseKey_Click" Margin="10,0,0,0"/></Grid>
+                  </StackPanel>
+                </Grid>
+              </Border>
+              <Border Style="{StaticResource CardBox}" Margin="0,0,0,18">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                  <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="3" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                  <StackPanel Grid.Column="1" Margin="18,4,0,0">
+                    <TextBlock Text="Identité du serveur" Style="{StaticResource CardTitle}"/>
+                    <TextBlock Text="Comparez l’empreinte présentée à celle de la console de votre hébergeur avant de l’accepter." Style="{StaticResource Hint}" Margin="0,4,0,14"/>
+                    <StackPanel Orientation="Horizontal">
+                      <Button Click="Trust_Click"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE83D;" Margin="0,0,8,0"/><TextBlock Text="Vérifier l’empreinte…"/></StackPanel></Button>
+                      <Border x:Name="TrustChip" Style="{StaticResource Chip}" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock x:Name="TrustText" FontSize="12" FontWeight="SemiBold"/></Border>
+                    </StackPanel>
+                  </StackPanel>
+                </Grid>
+              </Border>
+              <Button Style="{StaticResource Primary}" HorizontalAlignment="Left" Click="SaveConnection_Click" Padding="22,11"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE703;" Margin="0,0,10,0"/><TextBlock Text="Enregistrer et se connecter"/></StackPanel></Button>
+            </StackPanel>
+            <Border Grid.Column="2" Style="{StaticResource CardBox}" VerticalAlignment="Top">
+              <StackPanel>
+                <TextBlock Style="{StaticResource Icon}" Text="&#xE72E;" FontSize="26" Foreground="{StaticResource Cyan}" HorizontalAlignment="Left"/>
+                <TextBlock Text="Accès limité et sûr" Style="{StaticResource CardTitle}" Margin="0,12,0,8"/>
+                <TextBlock Style="{StaticResource Hint}" Text="Le panel passe par OpenSSH avec une clé dédiée et n’exécute que les commandes prévues par l’outil d’administration du VPS. Aucun mot de passe n’est demandé ni enregistré, et aucun terminal distant n’est ouvert."/>
+                <TextBlock Style="{StaticResource Hint}" Text="Réglages : %LOCALAPPDATA%\EclatServerPanel" FontFamily="{StaticResource Mono}" FontSize="11" Margin="0,14,0,0" Foreground="{StaticResource Faint}"/>
+              </StackPanel>
+            </Border>
+          </Grid>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+
+    <!-- Toasts -->
+    <StackPanel x:Name="Toasts" Grid.RowSpan="2" Grid.ColumnSpan="2" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,26,24" Width="380"/>
+
+    <!-- In-window confirmation -->
+    <Grid x:Name="DialogLayer" Grid.RowSpan="2" Grid.ColumnSpan="2" Visibility="Collapsed">
+      <Rectangle x:Name="DialogDim" Fill="#C0050814"/>
+      <Border x:Name="DialogCard" Width="540" VerticalAlignment="Center" HorizontalAlignment="Center" Background="{StaticResource CardHigh}" BorderBrush="#34437A" BorderThickness="1" CornerRadius="18" Padding="28" RenderTransformOrigin="0.5,0.5">
+        <Border.RenderTransform><ScaleTransform/></Border.RenderTransform>
+        <Border.Effect><DropShadowEffect BlurRadius="40" ShadowDepth="0" Opacity="0.55" Color="#000000"/></Border.Effect>
+        <StackPanel>
+          <Border x:Name="DialogIconBox" Width="46" Height="46" CornerRadius="14" Background="#3A1A2A" HorizontalAlignment="Left"><TextBlock x:Name="DialogIcon" Style="{StaticResource Icon}" Text="&#xE7BA;" FontSize="20" Foreground="{StaticResource Danger}" HorizontalAlignment="Center"/></Border>
+          <TextBlock x:Name="DialogTitle" FontSize="21" FontWeight="SemiBold" Margin="0,16,0,10"/>
+          <TextBlock x:Name="DialogMessage" Style="{StaticResource Hint}" FontSize="13.5" LineHeight="21"/>
+          <Border x:Name="DialogCodeBox" Background="#0B1126" CornerRadius="10" Padding="14,12" Margin="0,14,0,0" Visibility="Collapsed"><TextBox x:Name="DialogCode" IsReadOnly="True" Background="Transparent" BorderThickness="0" Padding="0" FontFamily="{StaticResource Mono}" FontSize="12" TextWrapping="Wrap"/></Border>
+          <StackPanel x:Name="DialogInputBox" Visibility="Collapsed" Margin="0,16,0,0">
+            <TextBlock x:Name="DialogInputLabel" Style="{StaticResource Overline}"/>
+            <TextBox x:Name="DialogInput" TextChanged="DialogInput_Changed"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+            <Button x:Name="DialogCancel" Content="Annuler" Click="DialogCancel_Click" Margin="0,0,10,0" IsCancel="True"/>
+            <Button x:Name="DialogConfirm" Style="{StaticResource Primary}" Click="DialogConfirm_Click"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
     </Grid>
   </Grid>
 </Window>

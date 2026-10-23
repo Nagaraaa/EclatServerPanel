@@ -8,6 +8,14 @@ Le panel passe par OpenSSH et une clé privée conservée sur votre PC. Le serve
 
 *Aperçu avec des données fictives.*
 
+L’interface sombre suit l’état du serveur en direct : orbe d’état qui pulse quand le jeu répond, compteurs et jauges animés, courbes des joueurs, salons, latence et charge sur les dernières actualisations. Les actions sensibles (arrêt, redémarrage, restauration) se confirment dans la fenêtre même ; les résultats s’affichent en notifications.
+
+| Joueurs et salons | Journaux | Sauvegardes |
+| --- | --- | --- |
+| ![Salons et joueurs](docs/captures/sessions.png) | ![Journaux filtrables](docs/captures/logs.png) | ![Instantanés et restauration](docs/captures/backups.png) |
+| **Diagnostic** | **Connexion** | **Confirmation** |
+| ![Diagnostic structuré](docs/captures/diagnostics.png) | ![Connexion en trois étapes](docs/captures/connection.png) | ![Restauration confirmée par saisie](docs/captures/restore-dialog.png) |
+
 ## Fonctions
 
 | Action | Fonctionnement |
@@ -64,7 +72,7 @@ Pour voir l’interface sans se connecter à un serveur :
 .\dist\win-x64\EclatServerPanel.exe --demo
 ```
 
-Le mode démo utilise des données fictives et ne permet pas de piloter le VPS.
+Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. `--capture-demo-pages DOSSIER` enregistre une capture de chaque page de la démo, après ses animations, ainsi que la fenêtre de confirmation de restauration.
 
 ## Exploitation
 
