@@ -44,7 +44,7 @@ public partial class App : Application
             }
             return;
         }
-        bool demo = e.Args.Contains("--demo") || e.Args.Contains("--capture-demo");
+        bool demo = e.Args.Contains("--demo") || e.Args.Contains("--capture-demo") || e.Args.Contains("--capture-demo-pages");
         var window = new MainWindow(demo);
         MainWindow = window;
         window.Show();
@@ -56,17 +56,42 @@ public partial class App : Application
             {
                 await window.WaitForIdleAsync();
                 await window.RefreshAsync();
-                await Task.Delay(300);
-                window.UpdateLayout();
-                var content = (FrameworkElement)window.Content;
-                var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-                bitmap.Render(content);
-                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
-                using var stream = File.Create(Path.GetFullPath(e.Args[captureIndex + 1]));
-                encoder.Save(stream);
+                await Task.Delay(1400); // let counters, gauges and curves finish
+                Capture(window, e.Args[captureIndex + 1]);
                 Shutdown();
             };
         }
+        // --capture-demo-pages DIR: one PNG per page, after its animations.
+        int pagesIndex = Array.IndexOf(e.Args, "--capture-demo-pages");
+        if (pagesIndex >= 0 && pagesIndex + 1 < e.Args.Length)
+        {
+            window.ContentRendered += async (_, _) =>
+            {
+                var directory = Directory.CreateDirectory(Path.GetFullPath(e.Args[pagesIndex + 1])).FullName;
+                await window.WaitForIdleAsync();
+                await window.RefreshAsync();
+                await window.RefreshAsync();
+                foreach (var page in new[] { "Overview", "Sessions", "Logs", "Backups", "Diagnostics", "Connection" })
+                {
+                    await window.ShowPageForCaptureAsync(page);
+                    Capture(window, Path.Combine(directory, page.ToLowerInvariant() + ".png"));
+                }
+                await window.ShowRestoreDialogForCaptureAsync();
+                Capture(window, Path.Combine(directory, "restore-dialog.png"));
+                Shutdown();
+            };
+        }
+    }
+
+    static void Capture(Window window, string path)
+    {
+        window.UpdateLayout();
+        var content = (FrameworkElement)window.Content;
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(content);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var stream = File.Create(Path.GetFullPath(path));
+        encoder.Save(stream);
     }
 }

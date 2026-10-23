@@ -145,17 +145,62 @@ internal static class ProcessRunner
 
 public sealed class DemoTransport : IPanelTransport
 {
+    // Same shapes as server/eclat-admin.py and the game's monitor.json, with
+    // a little movement between refreshes so the charts are not flat.
+    private readonly Random random = new(7);
+    private int tick;
+
     public Task<JsonElement> SendAsync(ConnectionSettings settings, string action, string? name = null)
     {
+        tick++;
         object data = action switch
         {
-            "status" or "diagnostics" => new { service = new { active = "active", sub = "running", pid = 1428 }, protocol = new { ok = true, latencyMs = 4.2 }, monitor = new { players = new[] { new { name = "Aurore", roomCode = "PRAIRIE" }, new { name = "Lucas", roomCode = "PRAIRIE" }, new { name = "Lou", roomCode = "FORÊT" } }, rooms = new[] { new { code = "PRAIRIE", players = new[] { "Aurore", "Lucas" } }, new { code = "FORÊT", players = new[] { "Lou" } } }, counters = new { connections = 17, messages = 2461 } }, network = new { publication = "available", tunnel = "connected" }, metrics = new { memoryTotalBytes = 8589934592L, memoryAvailableBytes = 6388752384L, diskTotalBytes = 107374182400L, diskFreeBytes = 94596653056L, load = "0.08 0.06 0.03" }, host = new { name = "serveur-demo", uptimeSeconds = 93840, nodeVersion = "v24.0.0" } },
-            "logs" => new { text = "DÉMONSTRATION — données fictives\n17:02:11  Service démarré\n17:02:11  Base SQLite ouverte, intégrité vérifiée\n17:02:12  Écoute du serveur de jeu activée\n17:06:28  Salon créé : 2 joueurs\n17:08:14  Contrôle du protocole : réponse reçue\n17:10:00  Sauvegarde terminée" },
-            "backups" => new { items = new[] { new { name = "2026-10-23_171000.tar.gz", size = 2483302, modifiedUtc = "2026-10-23T15:10:00Z" }, new { name = "2026-10-23_120000.tar.gz", size = 2458011, modifiedUtc = "2026-10-23T10:00:00Z" } } },
-            "backup" => new { name = "2026-10-23_171000.tar.gz", size = 2483302, integrity = "ok" },
+            "status" => Status(),
+            "diagnostics" => new { status = Status(), journal = Journal(), backupCount = 3 },
+            "logs" => new { text = Journal() },
+            "backups" => new { items = new[] {
+                new { name = "2026-10-23_171000.tar.gz", size = 2483302, modifiedUtc = DateTime.UtcNow.AddMinutes(-42).ToString("O") },
+                new { name = "2026-10-23_120000.tar.gz", size = 2458011, modifiedUtc = DateTime.UtcNow.AddHours(-6).ToString("O") },
+                new { name = "2026-10-22_120000.tar.gz", size = 2391554, modifiedUtc = DateTime.UtcNow.AddHours(-30).ToString("O") } } },
+            "backup" => new { name = "2026-10-23_" + DateTime.Now.ToString("HHmmss") + ".tar.gz", size = 2483302, integrity = "ok" },
+            "start" or "stop" or "restart" => new { service = new { active = "active", sub = "running", pid = 1428 } },
             _ => new { restored = true }
         };
         return Task.FromResult(JsonSerializer.SerializeToElement(data));
+    }
+
+    private object Status()
+    {
+        var players = new List<object> { new { id = "p1", name = "Aurore", roomId = "r1" }, new { id = "p2", name = "Lucas", roomId = "r1" }, new { id = "p3", name = "Lou", roomId = "r2" } };
+        if ((tick / 6) % 2 == 1 || tick > 14) players.Add(new { id = "p4", name = "Nagara", roomId = "r2" });
+        var now = DateTime.UtcNow.ToString("O");
+        return new
+        {
+            service = new { active = "active", sub = "running", pid = 1428 },
+            protocol = new { ok = true, latencyMs = Math.Round(3.4 + random.NextDouble() * 2.2, 1), error = (string?)null },
+            monitor = new
+            {
+                version = 1, updatedAt = now, status = "running", uptimeSeconds = 93840 + tick * 20,
+                memory = new { rssBytes = 96_000_000L + random.Next(0, 9_000_000), heapUsedBytes = 41_000_000L },
+                players,
+                rooms = new[] { new { id = "r1", name = "Prairie", visibility = "public", count = 2, capacity = 2 }, new { id = "r2", name = "Forêt de Jade", visibility = "private", count = players.Count - 2, capacity = 2 } },
+                counters = new { connections = 17 + tick, disconnections = 13 + tick, roomsCreated = 9, roomJoins = 15, roomLeaves = 11, errors = 1 },
+                lastError = new { at = DateTime.UtcNow.AddHours(-3).ToString("O"), code = "ROOM_FULL" }
+            },
+            network = new { publication = "available", tunnel = "connected", updatedAt = now },
+            metrics = new { memoryTotalBytes = 8589934592L, memoryAvailableBytes = 6388752384L - random.Next(0, 300_000_000), diskTotalBytes = 107374182400L, diskFreeBytes = 94596653056L, load = new[] { Math.Round(0.05 + random.NextDouble() * 0.2, 2), 0.06, 0.03 } },
+            host = new { name = "eclat-vps", uptimeSeconds = 1_209_600 + tick * 20, nodeVersion = "v24.14.0" }
+        };
+    }
+
+    private static string Journal()
+    {
+        string At(int minutes) => DateTime.Now.AddMinutes(-minutes).ToString("yyyy-MM-ddTHH:mm:ss") + "+0200 eclat-vps node[1428]: ";
+        return "DÉMONSTRATION — données fictives\n" + string.Join("\n", new[] {
+            At(64) + "Serveur Éclat démarré sur 127.0.0.1:8787", At(64) + "Base SQLite ouverte, intégrité vérifiée", At(63) + "Annuaire Coop publié",
+            At(41) + "Salon créé : Prairie (public)", At(40) + "Aurore a rejoint Prairie", At(39) + "Lucas a rejoint Prairie",
+            At(22) + "Avertissement : tunnel lent, nouvelle tentative", At(21) + "Tunnel reconnecté", At(18) + "Salon créé : Forêt de Jade (privé)",
+            At(12) + "Refus ROOM_FULL : salon complet", At(6) + "Sauvegarde terminée (2,4 Mo)", At(1) + "Contrôle du protocole : réponse en 4,1 ms" });
     }
 }
 
