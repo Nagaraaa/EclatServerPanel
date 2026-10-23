@@ -329,6 +329,28 @@ class TestAdmin(unittest.TestCase):
         self.assertEqual(sent[0]['payload']['name'], 'AdminCheck')
         self.assertEqual(sent[1]['type'], 'ping')
 
+    def test_protocol_recognizes_deliberate_maintenance_without_sending_ping(self):
+        stream = io.BytesIO()
+        stream.readline = lambda limit: b'{"v":1,"id":"admin_hello","type":"error","payload":{"code":"MAINTENANCE"}}\n'
+        connection = unittest.mock.Mock()
+        connection.makefile.return_value = stream
+        result = self.admin.probe_connection(connection)
+        self.assertEqual(result, {'maintenance': True})
+        self.assertEqual(len(stream.getvalue().splitlines()), 1)
+        for code in ('ACCOUNT_BANNED', 'UNKNOWN_ERROR', ''):
+            stream = io.BytesIO()
+            stream.readline = lambda limit: json.dumps({'type': 'error', 'payload': {'code': code}}).encode() + b'\n'
+            connection.makefile.return_value = stream
+            with self.subTest(code=code), self.assertRaises(RuntimeError):
+                self.admin.probe_connection(connection)
+
+    def test_watchdog_preserves_active_parties_during_three_maintenance_checks(self):
+        with patch.object(self.admin, 'service_state', return_value={'active': 'active'}), patch.object(self.admin, 'protocol', return_value={'ok': True, 'maintenance': True}), patch.object(self.admin, 'command') as command:
+            for _ in range(3):
+                self.admin.watchdog()
+            command.assert_not_called()
+        self.assertFalse((self.root / 'watchdog.json').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

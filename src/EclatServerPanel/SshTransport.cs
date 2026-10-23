@@ -9,11 +9,13 @@ namespace EclatServerPanel;
 public interface IPanelTransport
 {
     Task<JsonElement> SendAsync(ConnectionSettings settings, string action, string? name = null);
+    Task<JsonElement> SendAdminAsync(ConnectionSettings settings, string action, JsonElement fields)
+        => throw new InvalidOperationException("Cette connexion ne fournit pas les nouvelles fonctions d’administration.");
 }
 
-public sealed class SshTransport : IPanelTransport
+public sealed partial class SshTransport : IPanelTransport
 {
-    private static readonly HashSet<string> Actions = ["status", "logs", "start", "stop", "restart", "backup", "backups", "download", "restore", "diagnostics"];
+    private static readonly HashSet<string> Actions = ["status", "logs", "start", "stop", "restart", "backup", "backups", "download", "restore", "diagnostics", "close-room"];
     public async Task<JsonElement> SendAsync(ConnectionSettings settings, string action, string? name = null)
     {
         settings = settings.Snapshot();
@@ -40,6 +42,10 @@ public sealed class SshTransport : IPanelTransport
     {
         if (!Actions.Contains(action)) throw new InvalidOperationException("Action inconnue.");
         if (action is "download" or "restore") PanelResponse.ValidateSnapshotName(name);
+        else if (action == "close-room")
+        {
+            if (name is null || !System.Text.RegularExpressions.Regex.IsMatch(name, @"\A[a-zA-Z0-9_-]{1,64}\z")) throw new InvalidOperationException("Identifiant du salon invalide.");
+        }
         else if (name is not null) throw new InvalidOperationException("Cette action n’accepte pas de nom de sauvegarde.");
     }
     internal static List<string> BuildArguments(ConnectionSettings settings, string knownHostsPath)

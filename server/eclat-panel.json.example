@@ -4,6 +4,10 @@
   "dataDir": "/var/lib/eclat-originel",
   "database": "coop.sqlite",
   "backupDir": "/var/backups/eclat-originel",
+  "adminSocket": "/var/lib/eclat-originel/admin.sock",
+  "configValidator": "/opt/eclat-originel/app/server/src/admin-validate-config.js",
+  "nodeBinary": "/usr/local/bin/node",
+  "operationLock": "/run/lock/eclat-panel.lock",
   "port": 8787,
   "privateFiles": [
     "server.json",

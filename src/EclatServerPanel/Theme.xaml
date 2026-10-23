@@ -218,6 +218,34 @@
   </Style>
 
   <!-- Toggle used for "raw JSON" and auto-scroll switches. -->
+  <Style x:Key="ConnectionPicker" TargetType="ComboBox">
+    <Setter Property="Foreground" Value="{StaticResource Text}"/>
+    <Setter Property="Background" Value="{StaticResource Bg1}"/>
+    <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+    <Setter Property="ItemContainerStyle"><Setter.Value><Style TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="Padding" Value="12,10"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+        <Border x:Name="ItemBorder" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+        <ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource CrystalSoft}"/></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style></Setter.Value></Setter>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+      <Grid>
+        <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+          <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="{StaticResource Bg1}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"/></ControlTemplate></ToggleButton.Template>
+        </ToggleButton>
+        <TextBlock Margin="12,8,36,8" VerticalAlignment="Center" IsHitTestVisible="False" Text="{Binding SelectedItem.Label, RelativeSource={RelativeSource TemplatedParent}}" TextWrapping="Wrap" Foreground="{StaticResource Text}"/>
+        <TextBlock Text="▾" Margin="0,0,14,0" HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"/>
+        <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
+          <Border Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+            <ScrollViewer MaxHeight="240" CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+          </Border>
+        </Popup>
+      </Grid>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+
   <Style x:Key="Switch" TargetType="ToggleButton">
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Foreground" Value="{StaticResource Muted}"/>
@@ -234,8 +262,8 @@
         <Trigger Property="IsChecked" Value="True">
           <Setter TargetName="Track" Property="Background" Value="{StaticResource Crystal}"/>
           <Setter TargetName="Knob" Property="Fill" Value="#0A0F1F"/>
-          <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="KnobMove" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
-          <Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="KnobMove" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
+          <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="16" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
+          <Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
         </Trigger>
       </ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>

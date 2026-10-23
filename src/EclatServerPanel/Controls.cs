@@ -18,6 +18,8 @@ internal static class Motion
     public static void Enter(FrameworkElement element, double distance = 14, double milliseconds = 260)
     {
         var move = element.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        // Style resources may share frozen transforms. Animate a writable instance.
+        if (move.IsFrozen) move = move.Clone();
         element.RenderTransform = move;
         element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = Out });
         move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(distance, 0, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = Out });

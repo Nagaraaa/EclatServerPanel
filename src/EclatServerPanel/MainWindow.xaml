@@ -26,8 +26,8 @@
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <Border Width="38" Height="38" CornerRadius="19" Background="{Binding Avatar}"><TextBlock Text="{Binding Initial}" Foreground="#0A0F1F" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
         <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
-          <TextBlock Text="{Binding Room}" Style="{StaticResource Hint}" FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+          <TextBlock Text="{Binding Room}" Style="{StaticResource Hint}" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
         <Ellipse Grid.Column="2" Width="8" Height="8" Fill="{StaticResource Success}" VerticalAlignment="Center"/>
       </Grid>
@@ -68,7 +68,7 @@
               <Ellipse x:Name="SideDot" Fill="{StaticResource Faint}" Width="7" Height="7"/>
             </Grid>
             <StackPanel Grid.Column="1" Margin="12,0,0,0">
-              <TextBlock x:Name="EndpointText" Text="Aucun serveur" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+              <TextBlock x:Name="EndpointText" Text="Aucun serveur" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap"/>
               <TextBlock x:Name="SideStatus" Text="Non connecté" Style="{StaticResource Hint}" FontSize="12"/>
             </StackPanel>
           </Grid>
@@ -102,8 +102,10 @@
             <RadioButton x:Name="NavOverview" Style="{StaticResource NavItem}" Tag="Overview" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE80F;" FontSize="15" Width="28"/><TextBlock Text="Vue d’ensemble" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
             <RadioButton x:Name="NavSessions" Style="{StaticResource NavItem}" Tag="Sessions" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE716;" FontSize="15" Width="28"/><TextBlock Text="Joueurs et salons" FontSize="13.5" FontWeight="SemiBold"/><Border x:Name="PlayersBadge" Background="{StaticResource Crystal}" CornerRadius="9" Padding="7,1" Margin="10,0,0,0" Visibility="Collapsed"><TextBlock x:Name="PlayersBadgeText" Foreground="#0A0F1F" FontSize="11" FontWeight="Bold"/></Border></StackPanel></RadioButton>
             <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" Tag="Logs" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" FontSize="15" Width="28"/><TextBlock Text="Journaux" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <RadioButton x:Name="NavMap" Style="{StaticResource NavItem}" Tag="Map" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE707;" FontSize="15" Width="28"/><TextBlock Text="Carte" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
             <TextBlock Text="MAINTENANCE" Style="{StaticResource Overline}" Margin="14,18,0,8"/>
             <RadioButton x:Name="NavBackups" Style="{StaticResource NavItem}" Tag="Backups" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE81C;" FontSize="15" Width="28"/><TextBlock Text="Sauvegardes" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
+            <RadioButton x:Name="NavCommands" Style="{StaticResource NavItem}" Tag="Commands" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE713;" FontSize="15" Width="28"/><TextBlock Text="Administration" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
             <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" Tag="Diagnostics" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE9D9;" FontSize="15" Width="28"/><TextBlock Text="Diagnostic" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
             <RadioButton x:Name="NavConnection" Style="{StaticResource NavItem}" Tag="Connection" Checked="Navigate_Checked" GroupName="Nav"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Icon}" Text="&#xE703;" FontSize="15" Width="28"/><TextBlock Text="Connexion" FontSize="13.5" FontWeight="SemiBold"/></StackPanel></RadioButton>
           </StackPanel>
@@ -119,7 +121,7 @@
         <StackPanel>
           <TextBlock x:Name="PageOverline" Text="SERVEUR ÉCLAT" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
           <TextBlock x:Name="PageTitle" Text="Vue d’ensemble" FontSize="30" FontWeight="SemiBold"/>
-          <TextBlock x:Name="PageSubtitle" Style="{StaticResource Hint}" FontSize="13" Margin="0,4,0,0"/>
+
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock x:Name="ActivityText" Text="Prêt" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,16,0" TextWrapping="NoWrap"/>
@@ -133,6 +135,8 @@
       </Grid>
 
       <Grid x:Name="PageHost" Grid.Row="1">
+        <local:PlayerMapView x:Name="MapPage" Visibility="Collapsed"/>
+        <local:AdminPanelView x:Name="CommandsPage" Visibility="Collapsed"/>
         <!-- Overview -->
         <ScrollViewer x:Name="OverviewPage" VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="0,0,6,8">
@@ -262,15 +266,15 @@
                       <Border Style="{StaticResource CardBox}" Margin="0,0,14,14" Padding="18">
                         <StackPanel>
                           <Grid>
-                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,80,0"/>
+                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,80,0"/>
                             <Border Background="{Binding BadgeBackground}" CornerRadius="999" Padding="9,3" HorizontalAlignment="Right"><TextBlock Text="{Binding Visibility}" Foreground="{Binding BadgeForeground}" FontSize="11" FontWeight="SemiBold"/></Border>
                           </Grid>
-                          <TextBlock Text="{Binding Members}" Style="{StaticResource Hint}" Margin="0,8,0,12" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                          <TextBlock Text="{Binding Members}" Style="{StaticResource Hint}" Margin="0,8,0,12" TextWrapping="Wrap"/>
                           <Grid>
                             <Border Height="6" CornerRadius="3" Background="#222D58"/>
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="{Binding FillStar}"/><ColumnDefinition Width="{Binding RestStar}"/></Grid.ColumnDefinitions><Border Height="6" CornerRadius="3" Background="{StaticResource Crystal}"/></Grid>
                           </Grid>
-                          <TextBlock Text="{Binding Occupancy}" Style="{StaticResource Hint}" FontSize="12" Margin="0,8,0,0"/>
+                          <TextBlock Text="{Binding Occupancy}" Style="{StaticResource Hint}" FontSize="12" Margin="0,8,0,0"/><Button Content="Fermer le salon…" Click="CloseRoom_Click" Style="{StaticResource DangerButton}" Margin="0,14,0,0" HorizontalAlignment="Left"/>
                         </StackPanel>
                       </Border>
                     </DataTemplate>
@@ -297,6 +301,10 @@
 
         <!-- Logs -->
         <Grid x:Name="LogsPage" Visibility="Collapsed">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,12"><RadioButton x:Name="ServiceLogTab" Content="Service du jeu" Style="{StaticResource Segment}" GroupName="LogTab" IsChecked="True" Checked="LogsTab_Changed"/><RadioButton x:Name="AdminLogTab" Content="Administration" Style="{StaticResource Segment}" GroupName="LogTab" Checked="LogsTab_Changed"/></StackPanel>
+          <local:AdminAuditView x:Name="AdminJournal" Grid.Row="1" Visibility="Collapsed"/>
+          <Grid x:Name="ServiceLogsBody" Grid.Row="1">
           <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
           <Grid Margin="0,0,0,14">
             <Grid.ColumnDefinitions><ColumnDefinition Width="320"/><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -332,6 +340,7 @@
               </ListBox.ItemTemplate>
             </ListBox>
           </Border>
+          </Grid>
         </Grid>
 
         <!-- Backups -->
@@ -420,12 +429,13 @@
           <Grid Margin="0,0,6,8">
             <Grid.ColumnDefinitions><ColumnDefinition MaxWidth="760"/><ColumnDefinition Width="22"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
             <StackPanel>
+              <TextBlock Text="CONNEXIONS ENREGISTRÉES" Style="{StaticResource Overline}"/><ComboBox Style="{StaticResource ConnectionPicker}" x:Name="SavedConnections" DisplayMemberPath="Label" SelectionChanged="SavedConnection_Changed" Margin="0,0,0,16" MinHeight="36" AutomationProperties.Name="Connexions enregistrées"/>
               <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
                   <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="1" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel Grid.Column="1" Margin="18,4,0,0">
                     <TextBlock Text="Serveur" Style="{StaticResource CardTitle}"/>
-                    <TextBlock Text="Adresse du VPS et compte d’administration dédié." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Border Height="16"/>
                     <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
                       <StackPanel><TextBlock Text="ADRESSE" Style="{StaticResource Overline}"/><TextBox x:Name="HostBox" AutomationProperties.Name="Adresse du serveur"/></StackPanel>
                       <StackPanel Grid.Column="2"><TextBlock Text="PORT SSH" Style="{StaticResource Overline}"/><TextBox x:Name="PortBox" AutomationProperties.Name="Port SSH"/></StackPanel>
@@ -439,7 +449,7 @@
                   <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="2" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel Grid.Column="1" Margin="18,4,0,0">
                     <TextBlock Text="Clé privée" Style="{StaticResource CardTitle}"/>
-                    <TextBlock Text="Seul son chemin est enregistré, jamais son contenu. Une clé chiffrée se charge dans l’agent OpenSSH (ssh-add)." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Border Height="16"/>
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="KeyBox" AutomationProperties.Name="Chemin de la clé privée"/><Button Grid.Column="1" Content="Parcourir…" Click="BrowseKey_Click" Margin="10,0,0,0"/></Grid>
                   </StackPanel>
                 </Grid>

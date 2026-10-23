@@ -37,6 +37,7 @@ internal static class PanelResponse
                     NonNegative(data, "backupCount");
                     break;
                 case "logs": Require(String(data, "text").Length <= 131072); break;
+                case "close-room": Require(Property(data, "closed").ValueKind == JsonValueKind.True && String(data, "roomId") == requestedName); break;
                 case "start": case "stop": case "restart": ValidateService(Property(data, "service")); break;
                 case "backups":
                     var items = Property(data, "items");

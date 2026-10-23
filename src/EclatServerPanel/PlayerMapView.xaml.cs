@@ -1,0 +1,104 @@
+using System.ComponentModel;
+using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using System.Windows.Media;
+
+namespace EclatServerPanel;
+
+public partial class PlayerMapView : UserControl
+{
+    internal PlayerMapModel Model { get; } = new();
+    private readonly ListCollectionView tableView, cardView, placeView;
+    private bool updating, selecting;
+    private string? selectedId;
+    public PlayerMapView()
+    {
+        InitializeComponent();
+        tableView = new(Model.Players); cardView = new(Model.Players); placeView = new(Model.Players);
+        foreach (var view in new[] { tableView, cardView, placeView }) { view.Filter = item => Model.Matches((MapPlayer)item); view.SortDescriptions.Add(new(nameof(MapPlayer.Name), ListSortDirection.Ascending)); }
+        placeView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(MapPlayer.Location)));
+        PlayerTable.ItemsSource = tableView; PlayerCards.ItemsSource = cardView; PlayerPlaces.ItemsSource = placeView;
+        MapCanvas.Model = Model;
+        MapCanvas.Selected += id => Select(id, false);
+        MapCanvas.CrowdRequested += group => { CrowdTitle.Text = $"{group.Players.Count} joueurs · {group.Section.Name}"; CrowdRows.ItemsSource = group.Players; CrowdPanel.Visibility = Visibility.Visible; CrowdRows.SelectedItem = group.Players.FirstOrDefault(player => player.Id == selectedId); };
+        MapCanvas.CrowdClosed += () => CrowdPanel.Visibility = Visibility.Collapsed;
+        TableMode.IsChecked = true;
+        ResetFilters();
+    }
+    internal void Apply(JsonElement monitor, bool available)
+    {
+        var scrolls = new[] { FindScroll(PlayerTable), FindScroll(PlayerCards), FindScroll(PlayerPlaces), FindScroll(CrowdRows) }.Select(scroll => (Scroll: scroll, Offset: scroll?.VerticalOffset ?? 0)).ToArray();
+        updating = true;
+        // ObservableCollection notifications must reach WPF outside DeferRefresh;
+        // its selection code reads CurrentPosition while handling each change.
+        Model.Update(monitor, available);
+        ResetFilters();
+        updating = false;
+        RefreshViews();
+        Select(selectedId, false);
+        if (CrowdPanel.Visibility == Visibility.Visible)
+        {
+            var crowd = Model.Groups().FirstOrDefault(group => group.Section.Id == MapCanvas.ExpandedSection);
+            if (crowd is null || crowd.Players.Count <= 8) CrowdPanel.Visibility = Visibility.Collapsed;
+            else { CrowdRows.ItemsSource = crowd.Players; CrowdRows.SelectedItem = crowd.Players.FirstOrDefault(player => player.Id == selectedId); }
+        }
+        MapSummary.Text = available ? $"{Model.Players.Count} joueurs · positions de plus de 10 s estompées · survolez un groupe pour l’ouvrir" : "Activité non confirmée — actualisez avec un serveur compatible.";
+        Dispatcher.BeginInvoke(() => { foreach (var scroll in scrolls) scroll.Scroll?.ScrollToVerticalOffset(scroll.Offset); });
+    }
+    private void ResetFilters()
+    {
+        string room = Model.RoomFilter, place = Model.PlaceFilter;
+        RoomFilter.ItemsSource = new[] { new Choice("", "Tous les salons") }.Concat(Model.Players.GroupBy(player => player.RoomId).Select(group => new Choice(group.Key, group.First().Room))).ToList();
+        PlaceFilter.ItemsSource = new[] { new Choice("", "Tous les lieux") }.Concat(Model.Players.GroupBy(player => player.SectionId.Length == 0 ? "?" : player.SectionId).Select(group => new Choice(group.Key, group.First().Location))).ToList();
+        RoomFilter.SelectedValue = room; PlaceFilter.SelectedValue = place;
+    }
+    private void Filters_Changed(object sender, RoutedEventArgs e)
+    {
+        if (updating || PlayerTable is null || tableView is null) return;
+        Model.Search = SearchBox.Text.Trim(); Model.RoomFilter = RoomFilter.SelectedValue as string ?? ""; Model.PlaceFilter = PlaceFilter.SelectedValue as string ?? "";
+        RefreshViews();
+    }
+    private void RefreshViews() { tableView.Refresh(); cardView.Refresh(); placeView.Refresh(); MapCanvas.InvalidateVisual(); }
+    private void Mode_Changed(object sender, RoutedEventArgs e)
+    {
+        if (PlayerTable is null) return;
+        string mode = (string)((RadioButton)sender).Tag;
+        PlayerTable.Visibility = mode == "table" ? Visibility.Visible : Visibility.Collapsed;
+        PlayerCards.Visibility = mode == "cards" ? Visibility.Visible : Visibility.Collapsed;
+        PlayerPlaces.Visibility = mode == "places" ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private void Player_Selected(object sender, SelectionChangedEventArgs e)
+    {
+        if (updating || selecting) return;
+        if (((Selector)sender).SelectedItem is MapPlayer player) Select(player.Id, true);
+    }
+    private void Select(string? id, bool open)
+    {
+        if (selecting) return;
+        selecting = true;
+        selectedId = id;
+        var player = Model.Players.FirstOrDefault(player => player.Id == id);
+        PlayerTable.SelectedItem = player; PlayerCards.SelectedItem = player; PlayerPlaces.SelectedItem = player;
+        CrowdRows.SelectedItem = player;
+        MapCanvas.Select(id, open);
+        selecting = false;
+    }
+    internal void Tick() { foreach (var player in Model.Players) player.Tick(); MapCanvas.InvalidateVisual(); }
+    internal void CloseOverlay() => MapCanvas.Collapse();
+    internal void Clear() { updating = true; selectedId = null; Model.Clear(); SearchBox.Text = ""; ResetFilters(); MapCanvas.Collapse(); updating = false; RefreshViews(); MapSummary.Text = "En attente du serveur."; }
+    internal void CaptureMode(string mode, int groupSize = 0)
+    {
+        (mode == "cards" ? CardsMode : mode == "places" ? PlacesMode : TableMode).IsChecked = true;
+        if (groupSize > 0 && Model.Groups().FirstOrDefault(group => group.Players.Count == groupSize) is { } group) Select(group.Players[0].Id, true);
+    }
+    private static ScrollViewer? FindScroll(DependencyObject element)
+    {
+        if (element is ScrollViewer scroll) return scroll;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++) if (FindScroll(VisualTreeHelper.GetChild(element, i)) is { } child) return child;
+        return null;
+    }
+    private sealed record Choice(string Id, string Label);
+}
