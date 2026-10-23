@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace EclatServerPanel;
@@ -39,6 +40,11 @@ internal sealed class PlayerMapCanvas : FrameworkElement
     internal event Action<string>? Selected;
     internal event Action<MapGroup>? CrowdRequested;
     internal event Action? CrowdClosed;
+    /// <summary>The game's Town Map, read from the administrator's ROM; null draws the schematic.</summary>
+    internal BitmapSource? Picture { get => picture; set { picture = value; cachedAtlas = null; InvalidateVisual(); } }
+    private BitmapSource? picture;
+    private Rect pictureRect;
+    private bool UsePicture => picture is not null && Model.Atlas.Width == 22 && Model.Atlas.Height == 15;
 
     private readonly List<(Point Point, double Radius, MapGroup Group, MapPlayer? Player)> hits = [];
     private readonly DispatcherTimer frames = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
@@ -79,6 +85,7 @@ internal sealed class PlayerMapCanvas : FrameworkElement
     public PlayerMapCanvas()
     {
         MinHeight = 250; ClipToBounds = true; Focusable = true;
+        RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
         frames.Tick += (_, _) => { if (Window.GetWindow(this)?.WindowState != WindowState.Minimized) InvalidateVisual(); };
         IsVisibleChanged += (_, _) => UpdateClock();
         Unloaded += (_, _) => frames.Stop();
@@ -106,6 +113,19 @@ internal sealed class PlayerMapCanvas : FrameworkElement
         // above and below the region otherwise.
         bool column = size.Width >= 640;
         double left = column ? 230 : 24, right = 24, top = column ? 22 : 62, bottom = column ? 22 : 50;
+        if (UsePicture)
+        {
+            // Whole game pixels when there is room, so the art stays crisp.
+            double scale = Math.Min((size.Width - left - right) / TownMap.Width, (size.Height - top - bottom) / TownMap.Height);
+            if (scale >= 2) scale = Math.Floor(scale);
+            scale = Math.Max(0.5, scale);
+            cell = 8 * scale;
+            var corner = new Point(Math.Round(left + (size.Width - left - right - TownMap.Width * scale) / 2), Math.Round(top + (size.Height - top - bottom - TownMap.Height * scale) / 2));
+            pictureRect = new Rect(corner, new Size(TownMap.Width * scale, TownMap.Height * scale));
+            origin = new Point(corner.X + TownMap.GridX * cell, corner.Y + TownMap.GridY * cell);
+            land = roads = Geometry.Empty;
+            return;
+        }
         cell = Math.Max(4, Math.Min((size.Width - left - right) / Model.Atlas.Width, (size.Height - top - bottom) / Model.Atlas.Height));
         origin = new Point(left + (size.Width - left - right - cell * Model.Atlas.Width) / 2, top + (size.Height - top - bottom - cell * Model.Atlas.Height) / 2);
         var landGroup = new GeometryGroup { FillRule = FillRule.Nonzero };
@@ -142,6 +162,37 @@ internal sealed class PlayerMapCanvas : FrameworkElement
             return;
         }
         Layout();
+        var occupied = Model.Groups().Select(group => group.Section.Id).ToHashSet();
+        if (UsePicture) DrawPicture(drawing, occupied);
+        else DrawSchematic(drawing, occupied);
+        if (hovered is { } focus)
+        {
+            var r = Cells(focus);
+            drawing.DrawRoundedRectangle(MapPalette.SoftBrush(0), new Pen(Cyan, 1.4), Rect.Inflate(r, 2, 2), 6, 6);
+        }
+        Pins(drawing);
+    }
+
+    private static readonly Pen FramePen = MapPalette.Frozen(new Pen(MapPalette.Frozen(new SolidColorBrush(Color.FromArgb(0x80, 0x5E, 0xE6, 0xFF))), 1.5));
+    private static readonly Brush FrameShadow = MapPalette.Frozen(new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0x00, 0x00)));
+
+    private void DrawPicture(DrawingContext drawing, HashSet<string> occupied)
+    {
+        drawing.DrawRoundedRectangle(FrameShadow, null, new Rect(pictureRect.X + 4, pictureRect.Y + 6, pictureRect.Width, pictureRect.Height), 10, 10);
+        drawing.PushClip(new RectangleGeometry(pictureRect, 10, 10));
+        drawing.DrawImage(picture, pictureRect);
+        drawing.Pop();
+        drawing.DrawRoundedRectangle(null, FramePen, pictureRect, 10, 10);
+        // The art has no names: label only the towns where players are.
+        foreach (var section in Model.Atlas.Sections.Where(section => section.Kind == "city" && occupied.Contains(section.Id)))
+        {
+            var r = Cells(section);
+            Pill(drawing, section.Name, new Point(r.X + r.Width / 2 - 40, r.Bottom + 18), TextBrush, center: true);
+        }
+    }
+
+    private void DrawSchematic(DrawingContext drawing, HashSet<string> occupied)
+    {
         for (int x = 0; x <= Model.Atlas.Width; x++)
             for (int y = 0; y <= Model.Atlas.Height; y++)
                 drawing.DrawEllipse(GridDot, null, new Point(origin.X + x * cell, origin.Y + y * cell), 1, 1);
@@ -155,7 +206,6 @@ internal sealed class PlayerMapCanvas : FrameworkElement
             if (section.Width >= section.Height) drawing.DrawLine(dash, new Point(r.Left + cell * 0.35, c.Y), new Point(r.Right - cell * 0.35, c.Y));
             else drawing.DrawLine(dash, new Point(c.X, r.Top + cell * 0.35), new Point(c.X, r.Bottom - cell * 0.35));
         }
-        var occupied = Model.Groups().Select(group => group.Section.Id).ToHashSet();
         foreach (var section in Model.Atlas.Sections.Where(section => section.Kind == "area"))
         {
             var c = Center(section); double s = Math.Max(4, cell * 0.17);
@@ -177,12 +227,10 @@ internal sealed class PlayerMapCanvas : FrameworkElement
             // An occupied town carries a pin: write its name under the pin.
             drawing.DrawText(label, new Point(r.X + r.Width / 2 - label.MaxTextWidth / 2, r.Bottom + (lit ? Math.Max(2, 25 - cell / 2) : 1)));
         }
-        if (hovered is { } focus)
-        {
-            var r = Cells(focus);
-            drawing.DrawRoundedRectangle(MapPalette.SoftBrush(0), new Pen(Cyan, 1.4), Rect.Inflate(r, 2, 2), 6, 6);
-        }
+    }
 
+    private void Pins(DrawingContext drawing)
+    {
         double phase = Phase;
         var anchors = new List<Point>();
         foreach (var group in Model.Groups())
@@ -290,11 +338,12 @@ internal sealed class PlayerMapCanvas : FrameworkElement
         drawing.DrawGeometry(null, new Pen(brush, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, geometry);
     }
 
-    private void Pill(DrawingContext drawing, string value, Point at, Brush foreground)
+    private void Pill(DrawingContext drawing, string value, Point at, Brush foreground, bool center = false)
     {
         var text = Format(value, 11.5, foreground, true);
         text.MaxTextWidth = 220; text.MaxLineCount = 1; text.Trimming = TextTrimming.CharacterEllipsis;
         double width = Math.Min(220, text.Width) + 16;
+        if (center) at.X += 40 - width / 2;
         at.X = Math.Clamp(at.X, 4, Math.Max(4, ActualWidth - width - 4)); at.Y = Math.Clamp(at.Y, 4, Math.Max(4, ActualHeight - 26));
         drawing.DrawRoundedRectangle(PillBrush, PillPen, new Rect(at.X, at.Y, width, 22), 11, 11);
         drawing.DrawText(text, new Point(at.X + 8, at.Y + 11 - text.Height / 2));

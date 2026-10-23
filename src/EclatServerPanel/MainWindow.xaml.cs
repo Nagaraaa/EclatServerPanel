@@ -59,6 +59,8 @@ public partial class MainWindow : Window
         settings = injectedSettings ?? (demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load());
         pages = new() { ["Overview"] = OverviewPage, ["Sessions"] = SessionsPage, ["Logs"] = LogsPage, ["Backups"] = BackupsPage, ["Diagnostics"] = DiagnosticsPage, ["Connection"] = ConnectionPage };
         navigation = new() { ["Overview"] = NavOverview, ["Sessions"] = NavSessions, ["Logs"] = NavLogs, ["Backups"] = NavBackups, ["Diagnostics"] = NavDiagnostics, ["Connection"] = NavConnection };
+        MapPage.AllowGameMap = !demo || DemoTransport.HasAtlasOverride;
+        MapPage.Notice += (message, error) => Toast(message, error ? ToastKind.Error : ToastKind.Success);
         pages["Map"] = MapPage; pages["Commands"] = CommandsPage; navigation["Map"] = NavMap; navigation["Commands"] = NavCommands;
         InitializeAdministration();
         ReloadConnections();

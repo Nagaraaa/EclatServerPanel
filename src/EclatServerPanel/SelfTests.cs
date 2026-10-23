@@ -17,6 +17,7 @@ internal static partial class SelfTests
         BoundedReads();
         DemoTransitions();
         DemoAdministration();
+        TownMapReader();
         RunAdditional();
     }
     static partial void RunAdditional();
@@ -134,6 +135,29 @@ internal static partial class SelfTests
         Assert(Send("restore", created).GetProperty("restored").GetBoolean() && Send("backups").GetProperty("items").GetArrayLength() == before + 2, "Demo restore failed to produce a rollback snapshot");
         Reject(() => Send("restore", "eclat-20000101T000000Z-00000000.tar.gz"), "Demo restored an absent backup");
         Reject(() => Send("invented-action"), "Demo invented success for an unknown action");
+    }
+
+    private static void TownMapReader()
+    {
+        // Literals then a back-reference: "abc" + copy(length 3, distance 3).
+        byte[] packed = [0x10, 6, 0, 0, 0x10, (byte)'a', (byte)'b', (byte)'c', 0x00, 0x02];
+        Assert(System.Text.Encoding.ASCII.GetString(TownMap.Lz77(packed, 0, 64)) == "abcabc", "GBA LZ77 must expand literals and back-references");
+        foreach (var bad in new byte[][] { [0x11, 6, 0, 0], [0x10, 6, 0, 0, 0x80, 0x00, 0x00], [0x10, 6, 0, 0, 0x00, (byte)'a'], [0x10, 0, 1, 0] })
+        {
+            bool refused = false;
+            try { TownMap.Lz77(bad, 0, 64); } catch (InvalidOperationException) { refused = true; }
+            Assert(refused, "GBA LZ77 must refuse a wrong header, a reference before the start, truncated data and an oversized result");
+        }
+        string notRom = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllBytes(notRom, new byte[1024]);
+            bool refused = false;
+            try { TownMap.ImportFromRom(notRom); } catch (InvalidOperationException) { refused = true; }
+            Assert(refused, "Only an original Fire Red ROM may provide the Town Map");
+        }
+        finally { File.Delete(notRom); }
+        Assert(TownMap.GridX == 1 && TownMap.GridY == 2 && TownMap.Cells == 24 && TownMap.Rows == 18, "The server grid must start at the game cursor's first cell");
     }
 
     private static void DemoAdministration()

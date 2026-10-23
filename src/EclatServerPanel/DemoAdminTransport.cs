@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -47,6 +48,27 @@ public sealed partial class DemoTransport
             new { id = "demo-area-5", name = "Tour des Vents", x = 20, y = 2, width = 1, height = 1, kind = "area" }
         }
     };
+    // Developer aid: ECLAT_PANEL_DEMO_ATLAS may name a local copy of a server's
+    // atlas to check the demo players against it. Nothing of it is published.
+    private static readonly JsonElement? AtlasOverride = LoadAtlasOverride();
+    internal static bool HasAtlasOverride => AtlasOverride is not null;
+    private static JsonElement? LoadAtlasOverride()
+    {
+        string? path = Environment.GetEnvironmentVariable("ECLAT_PANEL_DEMO_ATLAS");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+        try { using var document = JsonDocument.Parse(File.ReadAllText(path)); return document.RootElement.Clone(); }
+        catch (Exception ex) when (ex is IOException or JsonException) { return null; }
+    }
+    private static (string Id, string Name) DemoPlace(string section)
+    {
+        string name = section == "demo-a" ? "Cité des longs noms accentués" : section == "demo-b" ? "Les Jardins de l’aurore boréale" : "Le Belvédère des brumes légères";
+        if (AtlasOverride is not { } atlas) return (section, name);
+        var sections = atlas.GetProperty("sections").EnumerateArray().ToList();
+        var cities = sections.Where(item => item.GetProperty("kind").GetString() == "city").ToList();
+        var areas = sections.Where(item => item.GetProperty("kind").GetString() == "area").ToList();
+        var pick = section == "demo-a" ? cities[0] : section == "demo-b" ? cities[Math.Min(6, cities.Count - 1)] : areas.Count > 1 ? areas[1] : cities[^1];
+        return (pick.GetProperty("id").GetString()!, pick.GetProperty("name").GetString()!);
+    }
     private readonly List<DemoPlayer> demoPlayers = [];
     private readonly List<DemoRoom> demoRooms = [];
     private readonly Dictionary<string, DemoAccount> demoAccounts = new(StringComparer.Ordinal);
@@ -132,8 +154,8 @@ public sealed partial class DemoTransport
         {
             mapGroup = player.Section == "demo-a" ? 4 : player.Section == "demo-b" ? 6 : 8,
             mapNum = 1, x = 5 + player.Index % 7, y = 3 + player.Index % 5, direction = player.Index % 4 + 1,
-            name = player.Section == "demo-a" ? "Cité des longs noms accentués" : player.Section == "demo-b" ? "Les Jardins de l’aurore boréale" : "Le Belvédère des brumes légères",
-            section = player.Section
+            name = DemoPlace(player.Section).Name,
+            section = DemoPlace(player.Section).Id
         };
         return new { id = player.Id, name = player.Name, roomId = player.RoomId, place,
             stateAgeMs = player.Section is null ? (int?)null : player.Index is 16 or 18 ? 18000 + player.Index * 100 : 250 + player.Index * 70,

@@ -15,6 +15,14 @@ public partial class App : Application
             catch (Exception ex) { Console.Error.WriteLine(ex.ToString()); Shutdown(1); }
             return;
         }
+        // --import-town-map ROM: same import as the map page's button, without the window.
+        int townIndex = Array.IndexOf(e.Args, "--import-town-map");
+        if (townIndex >= 0 && townIndex + 1 < e.Args.Length)
+        {
+            try { TownMap.ImportFromRom(e.Args[townIndex + 1]); Shutdown(0); }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Shutdown(1); }
+            return;
+        }
         int checkIndex = Array.IndexOf(e.Args, "--check-connection");
         if (checkIndex >= 0 && checkIndex + 1 < e.Args.Length)
         {

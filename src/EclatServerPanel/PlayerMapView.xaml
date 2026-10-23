@@ -69,6 +69,15 @@
       <Border CornerRadius="16" BorderBrush="{StaticResource Line}" BorderThickness="1" ClipToBounds="True">
         <Grid>
           <local:PlayerMapCanvas x:Name="MapCanvas"/>
+          <Border x:Name="MapSkin" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,74,0,0" Background="#E6141C3A" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="4">
+            <StackPanel Orientation="Horizontal">
+              <Button x:Name="RomButton" Style="{StaticResource Ghost}" Padding="10,5" Click="ImportRom_Click" ToolTip="Lit la Carte de la Ville dans votre ROM Rouge Feu d’origine (française ou anglaise). L’image reste sur ce PC.">
+                <StackPanel Orientation="Horizontal"><TextBlock Text="&#xE909;" FontFamily="{StaticResource Icons}" Margin="0,1,8,0" Foreground="{StaticResource Cyan}"/><TextBlock Text="Afficher la carte du jeu…" Foreground="{StaticResource Text}"/></StackPanel>
+              </Button>
+              <RadioButton x:Name="GameMapMode" Content="Carte du jeu" Style="{StaticResource Segment}" GroupName="MapSkin" Checked="Skin_Changed" ToolTip="Carte lue dans votre ROM, gardée dans votre profil Windows"/>
+              <RadioButton x:Name="SchemaMode" Content="Schéma" Style="{StaticResource Segment}" GroupName="MapSkin" Checked="Skin_Changed"/>
+            </StackPanel>
+          </Border>
           <StackPanel Margin="18,14,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
             <TextBlock x:Name="MapTitle" Text="Région" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
             <TextBlock x:Name="MapHeadline" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Text}" MaxWidth="200" TextWrapping="Wrap"/>

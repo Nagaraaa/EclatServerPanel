@@ -28,6 +28,7 @@ public partial class PlayerMapView : UserControl
         SearchBox.TextChanged += (_, _) => SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         TableMode.IsChecked = true;
         ResetFilters();
+        UpdateSkin();
     }
     internal void Apply(JsonElement monitor, bool available)
     {
@@ -119,6 +120,40 @@ public partial class PlayerMapView : UserControl
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++) if (FindScroll(VisualTreeHelper.GetChild(element, i)) is { } child) return child;
         return null;
     }
+    // ---- Town Map read from the administrator's ROM --------------------------
+    private System.Windows.Media.Imaging.BitmapSource? townMap = TownMap.LoadCached();
+    private bool allowGameMap = true;
+    /// <summary>False in the demonstration, whose synthetic region does not match the game's map.</summary>
+    internal bool AllowGameMap { get => allowGameMap; set { allowGameMap = value; UpdateSkin(); } }
+    internal event Action<string, bool>? Notice;
+    private void UpdateSkin()
+    {
+        if (!allowGameMap) { MapSkin.Visibility = Visibility.Collapsed; MapCanvas.Picture = null; return; }
+        MapSkin.Visibility = Visibility.Visible;
+        bool has = townMap is not null;
+        RomButton.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
+        GameMapMode.Visibility = SchemaMode.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+        if (has && GameMapMode.IsChecked != true && SchemaMode.IsChecked != true) GameMapMode.IsChecked = true;
+        MapCanvas.Picture = has && GameMapMode.IsChecked == true ? townMap : null;
+    }
+    private void Skin_Changed(object sender, RoutedEventArgs e) { if (MapCanvas is not null) UpdateSkin(); }
+    private async void ImportRom_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Choisir la ROM Rouge Feu d’origine", Filter = "ROM Game Boy Advance (*.gba)|*.gba|Tous les fichiers (*.*)|*.*", CheckFileExists = true };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        RomButton.IsEnabled = false;
+        try
+        {
+            var (map, label) = await Task.Run(() => TownMap.ImportFromRom(dialog.FileName));
+            townMap = map;
+            GameMapMode.IsChecked = true;
+            UpdateSkin();
+            Notice?.Invoke($"Carte du jeu lue dans la ROM {label}. L’image reste sur ce PC ; la ROM n’est pas copiée.", false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or UnauthorizedAccessException) { Notice?.Invoke(ex.Message, true); }
+        finally { RomButton.IsEnabled = true; }
+    }
+
     private sealed record Choice(string Id, string Label);
     private sealed record LegendItem(System.Windows.Media.Brush Brush, string Name, string Count);
     private sealed record PlaceItem(string Name, string Count, GridLength Fill, GridLength Rest);
