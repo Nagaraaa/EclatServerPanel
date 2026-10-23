@@ -1,0 +1,43 @@
+name: Build and checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: Linux administration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check installer syntax
+        run: bash -n server/install.sh
+      - name: Test request validation, snapshots and restore
+        run: python -m unittest discover -s tests -v
+
+  windows:
+    name: Windows panel
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build src/EclatServerPanel/EclatServerPanel.csproj -c Release
+      - name: Check local models and validation
+        run: dotnet run --project src/EclatServerPanel/EclatServerPanel.csproj -c Release --no-build -- --self-test
+      - name: Publish portable application
+        run: dotnet publish src/EclatServerPanel/EclatServerPanel.csproj -c Release -r win-x64 --self-contained true -o dist/win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EclatServerPanel-windows-x64
+          path: dist/win-x64/
+          if-no-files-found: error

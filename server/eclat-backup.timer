@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Éclat Originel database and private configuration snapshot
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=eclat-backup.service
+
+[Install]
+WantedBy=timers.target

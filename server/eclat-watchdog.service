@@ -1,0 +1,15 @@
+[Unit]
+Description=Check the Éclat Originel game protocol
+After=eclat-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/eclat-admin --watchdog
+User=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run
+TimeoutStartSec=60

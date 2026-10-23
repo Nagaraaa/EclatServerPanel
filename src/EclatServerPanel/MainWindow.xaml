@@ -1,0 +1,87 @@
+<Window x:Class="EclatServerPanel.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Éclat — Administration" Width="1210" Height="850" MinWidth="1020" MinHeight="720" WindowStartupLocation="CenterScreen" Background="#F5F4EF" Foreground="#202D28">
+  <Grid Background="#F5F4EF">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="222"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Background="#172D24">
+      <DockPanel Margin="20,30,20,24">
+        <StackPanel DockPanel.Dock="Top" Margin="12,0,0,35">
+          <TextBlock Text="éclat" Foreground="#FCFBF4" FontFamily="Georgia" FontSize="37"/>
+          <TextBlock Text="ADMINISTRATION" Foreground="#A5B9AB" FontSize="10" Margin="1,9,0,0"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Margin="12,0,9,0">
+          <Border Height="1" Background="#3A4C40" Margin="0,0,0,20"/>
+          <TextBlock Text="Le serveur continue de tourner quand vous fermez cette fenêtre." Foreground="#9DB2A3" FontSize="12" LineHeight="19"/>
+          <TextBlock x:Name="ModeText" Text="SSH · clé dédiée" Foreground="#D3BE87" FontSize="11" Margin="0,22,0,0"/>
+        </StackPanel>
+        <StackPanel>
+          <Button x:Name="NavOverview" Style="{StaticResource Nav}" Content="Vue d’ensemble" Tag="Overview" Click="Navigate_Click"/>
+          <Button x:Name="NavSessions" Style="{StaticResource Nav}" Content="Joueurs et salons" Tag="Sessions" Click="Navigate_Click"/>
+          <Button x:Name="NavLogs" Style="{StaticResource Nav}" Content="Journaux" Tag="Logs" Click="Navigate_Click"/>
+          <Button x:Name="NavBackups" Style="{StaticResource Nav}" Content="Sauvegardes" Tag="Backups" Click="Navigate_Click"/>
+          <Button x:Name="NavDiagnostics" Style="{StaticResource Nav}" Content="Diagnostic" Tag="Diagnostics" Click="Navigate_Click"/>
+          <Border Height="1" Background="#304638" Margin="12,22"/>
+          <Button x:Name="NavConnection" Style="{StaticResource Nav}" Content="Connexion" Tag="Connection" Click="Navigate_Click"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Column="1" Margin="35,29,35,22">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Grid Margin="0,0,0,27"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel><TextBlock Text="POKÉMON ÉCLAT" Style="{StaticResource Label}" FontSize="10"/><TextBlock x:Name="PageTitle" Text="Vue d’ensemble" FontSize="28" FontWeight="SemiBold"/></StackPanel>
+        <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock x:Name="EndpointText" Text="Aucun serveur configuré" FontSize="12" Foreground="{StaticResource Muted}" TextAlignment="Right"/><TextBlock x:Name="UpdatedText" Text="En attente de connexion" FontSize="11" Foreground="{StaticResource Muted}" TextAlignment="Right" Margin="0,5,0,0"/></StackPanel>
+      </Grid>
+      <Border x:Name="MessageBar" Grid.Row="1" Visibility="Collapsed" CornerRadius="5" Background="#FFF0D6" Padding="15,12" Margin="0,0,0,18"><TextBlock x:Name="MessageText" Foreground="#6C4A16"/></Border>
+      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="0,0,9,0">
+          <StackPanel x:Name="OverviewPage">
+            <Border Style="{StaticResource Card}" Padding="28" Margin="0,0,0,20">
+              <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel><TextBlock Text="SERVEUR DE JEU" Style="{StaticResource Label}" FontSize="10"/><StackPanel Orientation="Horizontal" Margin="0,3,0,9"><Ellipse x:Name="StatusDot" Width="10" Height="10" Fill="#9BA39B" Margin="0,0,12,0"/><TextBlock x:Name="ServerStatus" Text="Connexion à établir" FontSize="25" FontWeight="SemiBold"/></StackPanel><TextBlock x:Name="StatusDetail" Text="Configurez le compte SSH pour consulter le serveur." Foreground="{StaticResource Muted}" MaxWidth="550" LineHeight="21"/><TextBlock x:Name="NetworkText" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,9,0,0"/></StackPanel>
+                <Button Grid.Column="1" Content="Actualiser" Click="Refresh_Click" VerticalAlignment="Center" Margin="20,0,0,0"/>
+              </Grid>
+            </Border>
+            <UniformGrid Columns="3" Margin="0,0,0,22">
+              <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Joueurs connectés" Style="{StaticResource Label}"/><TextBlock x:Name="PlayersValue" Text="—" FontSize="33"/><TextBlock x:Name="RoomsValue" Text="Salons : —" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
+              <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Réponse du jeu" Style="{StaticResource Label}"/><TextBlock x:Name="LatencyValue" Text="—" FontSize="33"/><TextBlock Text="Mesurée depuis le VPS" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
+              <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Mémoire du VPS" Style="{StaticResource Label}"/><TextBlock x:Name="MemoryValue" Text="—" FontSize="33"/><TextBlock x:Name="MemoryDetail" Text="Consommation totale" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
+            </UniformGrid>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20"><StackPanel><TextBlock Text="Commandes du service" Style="{StaticResource Section}"/><TextBlock Text="Les arrêts et redémarrages interrompent les parties en cours." Foreground="{StaticResource Muted}" Margin="0,0,0,20"/><WrapPanel><Button Content="Démarrer" Style="{StaticResource Primary}" Tag="start" Click="Service_Click" Margin="0,0,10,0"/><Button Content="Redémarrer…" Tag="restart" Click="Service_Click" Margin="0,0,10,0"/><Button Content="Arrêter…" Tag="stop" Click="Service_Click" Foreground="#8C3E31"/></WrapPanel></StackPanel></Border>
+            <Border BorderBrush="#D7DDD3" BorderThickness="0,1,0,0" Padding="0,18,0,0"><TextBlock Text="L’état du service et la réponse du jeu sont contrôlés séparément. Un processus actif peut ne plus accepter les joueurs." FontSize="12" Foreground="{StaticResource Muted}" LineHeight="20"/></Border>
+          </StackPanel>
+          <StackPanel x:Name="SessionsPage" Visibility="Collapsed">
+            <TextBlock Text="Activité en cours" Style="{StaticResource Section}"/>
+            <TextBlock Text="Informations remontées par le serveur. Actualisez pour suivre les connexions." Foreground="{StaticResource Muted}" Margin="0,0,0,20"/>
+            <Button Content="Actualiser l’activité" Click="Refresh_Click" HorizontalAlignment="Left" Margin="0,0,0,18"/>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,18"><StackPanel><TextBlock Text="Joueurs" Style="{StaticResource Section}"/><ItemsControl x:Name="PlayerItems"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#E3E6DF" BorderThickness="0,0,0,1" Padding="0,12"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,5,0,0"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,18"><StackPanel><TextBlock Text="Salons" Style="{StaticResource Section}"/><ItemsControl x:Name="RoomItems"><ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="#E3E6DF" BorderThickness="0,0,0,1" Padding="0,12"><StackPanel><TextBlock Text="{Binding Label}" FontWeight="SemiBold"/><TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,5,0,0"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border>
+            <Expander Header="Détails de l’activité"><TextBox x:Name="SessionsText" IsReadOnly="True" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" Background="Transparent" Margin="0,15,0,0"/></Expander>
+          </StackPanel>
+          <Grid x:Name="LogsPage" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <StackPanel Margin="0,0,0,18"><TextBlock Text="Dernières lignes du service" Style="{StaticResource Section}"/><Button Content="Recharger les journaux" Click="Logs_Click" HorizontalAlignment="Left"/></StackPanel>
+            <TextBox x:Name="LogsText" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" Background="#1C2C25" Foreground="#D9E4DA" Padding="22" BorderThickness="0" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Height="450"/>
+          </Grid>
+          <StackPanel x:Name="BackupsPage" Visibility="Collapsed">
+            <TextBlock Text="Sauvegardes du serveur" Style="{StaticResource Section}"/>
+            <TextBlock Text="Les instantanés restent sur le VPS. Téléchargez une copie de la base sur votre PC pour conserver une sauvegarde indépendante." Foreground="{StaticResource Muted}" LineHeight="21" Margin="0,0,0,22"/>
+            <WrapPanel Margin="0,0,0,22"><Button Content="Créer une sauvegarde" Style="{StaticResource Primary}" Click="CreateBackup_Click" Margin="0,0,10,0"/><Button Content="Actualiser la liste" Click="Backups_Click"/></WrapPanel>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,20"><StackPanel><TextBlock Text="Instantané" Style="{StaticResource Label}"/><ComboBox x:Name="BackupList" DisplayMemberPath="Label" MinHeight="42"/><TextBlock x:Name="BackupDetail" Text="Aucune liste chargée." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,12,0,20"/><WrapPanel><Button Content="Télécharger la base…" Click="Download_Click" Margin="0,0,10,0"/><Button Content="Restaurer…" Click="Restore_Click" Foreground="#8C3E31"/></WrapPanel></StackPanel></Border>
+            <TextBlock Text="Une restauration remplace les données actuelles. Une copie de retour arrière est créée par le serveur avant la remise en place de la base." Foreground="{StaticResource Muted}" FontSize="12" LineHeight="20"/>
+          </StackPanel>
+          <StackPanel x:Name="DiagnosticsPage" Visibility="Collapsed"><TextBlock Text="Service et machine" Style="{StaticResource Section}"/><Button Content="Lancer le diagnostic" Click="Diagnostics_Click" HorizontalAlignment="Left" Margin="0,0,0,18"/><Border Style="{StaticResource Card}"><TextBox x:Name="DiagnosticsText" IsReadOnly="True" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextWrapping="Wrap" BorderThickness="0" MinHeight="380" Background="Transparent"/></Border></StackPanel>
+          <StackPanel x:Name="ConnectionPage" Visibility="Collapsed">
+            <TextBlock Text="Accès au VPS" Style="{StaticResource Section}"/>
+            <TextBlock Text="Utilisez le compte d’administration dédié et sa clé privée. Ces réglages sont enregistrés uniquement sur ce PC." Foreground="{StaticResource Muted}" LineHeight="21" Margin="0,0,0,22"/>
+            <Border Style="{StaticResource Card}"><StackPanel>
+              <Grid Margin="0,0,0,18"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,15,0"><TextBlock Text="Adresse du serveur" Style="{StaticResource Label}"/><TextBox x:Name="HostBox" AutomationProperties.Name="Adresse du serveur"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="Port SSH" Style="{StaticResource Label}"/><TextBox x:Name="PortBox" AutomationProperties.Name="Port SSH"/></StackPanel></Grid>
+              <TextBlock Text="Compte SSH" Style="{StaticResource Label}"/><TextBox x:Name="UserBox" Margin="0,0,0,18" AutomationProperties.Name="Compte SSH"/>
+              <TextBlock Text="Clé privée" Style="{StaticResource Label}"/><Grid Margin="0,0,0,20"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="KeyBox" AutomationProperties.Name="Chemin de la clé privée"/><Button Grid.Column="1" Content="Parcourir…" Click="BrowseKey_Click" Margin="10,0,0,0"/></Grid>
+              <WrapPanel><Button Content="Vérifier l’empreinte…" Click="Trust_Click" Margin="0,0,10,0"/><Button Content="Enregistrer et connecter" Style="{StaticResource Primary}" Click="SaveConnection_Click"/></WrapPanel>
+            </StackPanel></Border>
+            <TextBlock Text="Comparez l’empreinte présentée à celle de la console de votre hébergeur avant de l’accepter. Une clé chiffrée doit être chargée dans l’agent OpenSSH de Windows." Foreground="{StaticResource Muted}" FontSize="12" LineHeight="20" Margin="0,20,0,0"/>
+            <TextBlock Text="Aucun mot de passe n’est enregistré par l’application." FontSize="12" Foreground="{StaticResource Muted}" Margin="0,12,0,0"/>
+          </StackPanel>
+        </Grid>
+      </ScrollViewer>
+      <Grid Grid.Row="3" Margin="0,22,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ActivityText" Text="Prêt" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock Text="Éclat · 1.0" Grid.Column="1" Foreground="#92998E" FontSize="11"/></Grid>
+    </Grid>
+  </Grid>
+</Window>

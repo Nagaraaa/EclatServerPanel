@@ -1,0 +1,36 @@
+[Unit]
+Description=Pokémon Éclat Originel game server
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=8
+
+[Service]
+Type=simple
+User=eclat-server
+Group=eclat-server
+WorkingDirectory=/opt/eclat-originel/app
+Environment=NODE_ENV=production
+Environment=ECLAT_SERVER_DATA=/var/lib/eclat-originel
+Environment=HOME=/var/lib/eclat-originel
+ExecStartPre=/usr/local/lib/eclat-panel/prepare-start.py
+ExecStart=/usr/local/bin/node /opt/eclat-originel/app/internet-launch.mjs start --data /var/lib/eclat-originel
+Restart=on-failure
+RestartSec=35
+TimeoutStopSec=40
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/eclat-originel
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

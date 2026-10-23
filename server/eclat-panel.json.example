@@ -1,0 +1,16 @@
+{
+  "service": "eclat-server.service",
+  "serviceUser": "eclat-server",
+  "dataDir": "/var/lib/eclat-originel",
+  "database": "coop.sqlite",
+  "backupDir": "/var/backups/eclat-originel",
+  "port": 8787,
+  "privateFiles": [
+    "server.json",
+    "coop.sqlite.identity.json",
+    "eclats.json",
+    "coop-publish.json",
+    "internet-access.json",
+    "cloudflared-quick.yml"
+  ]
+}
