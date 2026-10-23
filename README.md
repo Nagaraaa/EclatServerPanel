@@ -4,7 +4,7 @@ Application Windows pour administrer un serveur de jeu Éclat à distance : voir
 
 Le panel passe par OpenSSH et une clé privée conservée sur votre PC. Le serveur continue de tourner lorsque l’application est fermée. Aucun port d’administration Web supplémentaire n’est nécessaire.
 
-**La dernière version publiée est la 1.1.1.** La carte des joueurs et les nouvelles commandes décrites ci-dessous sont proposées en préversion dans cette PR. Elles demandent aussi le [serveur compatible proposé dans la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et le nouvel outil Linux. L’archive de la version 1.1.1 ne les contient pas. Cette préversion a été testée localement ; aucun VPS n’a été modifié pour sa validation.
+**La version 1.2.0 réunit la carte, les commandes d’administration et les corrections des contrôles du panel.** La carte et les commandes demandent aussi le [serveur compatible de la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et l’outil Linux correspondant. Installer l’application Windows ne les installe pas sur le VPS. La validation de cette version utilise des serveurs locaux temporaires ; aucun VPS n’a été contacté ou modifié pour cette intégration.
 
 ![Vue d’ensemble du panel en mode démonstration](docs/panel.png)
 
@@ -24,7 +24,7 @@ L’interface sombre présente l’état du jeu, ses ressources, ses joueurs et 
 
 | Commandes d’administration | Confirmation par saisie |
 | --- | --- |
-| ![Commandes disponibles dans la préversion](docs/captures/commands.png) | ![Confirmation du montant d’une modification de solde](docs/captures/admin-confirmation.png) |
+| ![Commandes disponibles dans la version 1.2.0](docs/captures/commands.png) | ![Confirmation du montant d’une modification de solde](docs/captures/admin-confirmation.png) |
 
 *Toutes les captures utilisent des données de démonstration.*
 
@@ -34,13 +34,14 @@ L’interface sombre présente l’état du jeu, ses ressources, ses joueurs et 
 | --- | --- |
 | Vérifier l’état | État du service et échange `hello` / `ping` avec le jeu. Un processus actif ne suffit pas à déclarer le jeu disponible. |
 | Voir l’activité | Joueurs et salons remontés par le serveur, avec la capacité de chaque salon, jusqu’à dix joueurs. Une activité absente ou ancienne est indiquée comme non confirmée. |
+| Fermer un salon | Confirmation, sortie des membres et suppression du salon, sans fermer les autres salons. Les deux boutons de fermeture utilisent le même canal d’administration du serveur. |
 | Contrôler le service | Démarrer, arrêter ou redémarrer le service du jeu. |
 | Lire les journaux | Dernières lignes du service, avec masquage des valeurs sensibles reconnues. |
 | Suivre les ressources | Mémoire, charge et espace disque du VPS. |
 | Sauvegarder | Créer un instantané SQLite cohérent et en télécharger une copie vérifiée par SHA-256. |
 | Restaurer | Choisir une sauvegarde, confirmer la restauration et conserver une copie de la base précédente. |
 
-La préversion ajoute :
+La version 1.2.0 comprend aussi :
 
 - une carte schématique avec regroupement des joueurs, positions anciennes estompées et liste en tableau, fiches ou par lieu ;
 - l’expulsion, le bannissement et sa levée, la fermeture ou la modification d’un salon et le mode maintenance ;
@@ -68,7 +69,7 @@ Le panel est conçu pour un serveur Éclat compatible avec l’outil Linux de ce
 
 ## Télécharger
 
-Prendre l’archive Windows dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l’archive. Ce lien fournit actuellement la 1.1.1 ; pour essayer la carte et les nouvelles commandes, compiler la préversion et préparer un serveur de test compatible.
+Prendre l’archive Windows 1.2.0 dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l’archive. Le [guide de déploiement](docs/deploiement.md) décrit les éléments à installer séparément sur un serveur compatible.
 
 ## Première connexion
 
@@ -76,6 +77,10 @@ Prendre l’archive Windows dans les [versions publiées](https://github.com/Nag
 2. Ouvrir le panel et renseigner l’hôte, le port SSH, le compte dédié et le chemin de la clé privée.
 3. Afficher l’empreinte du serveur. La comparer à l’empreinte obtenue dans la console du fournisseur avant de l’accepter.
 4. Tester la connexion et consulter l’état du jeu.
+
+La liste **Connexions enregistrées** permet de sélectionner un accès mémorisé. **Enregistrer et se connecter** conserve aussi les autres profils. L’ancienne connexion est reprise automatiquement. Les profils sont dans `%LOCALAPPDATA%\EclatServerPanel\connections.json`.
+
+Le sélecteur conserve le thème sombre. L’ancien fichier `connection.json` et les empreintes SSH restent utilisables ; une mise à jour du panel ne demande pas de recréer les clés. Changer de profil efface les données affichées pour l’ancien hôte avant un nouveau contrôle.
 
 Les réglages sont enregistrés dans `%LOCALAPPDATA%\EclatServerPanel\connection.json`. Ils contiennent l’adresse du serveur et le chemin de la clé, jamais son contenu. Les clés d’hôte acceptées sont conservées dans un fichier `known_hosts` du même dossier. Aucun mot de passe root n’est demandé ou enregistré par le panel.
 
@@ -100,7 +105,7 @@ Pour voir l’interface sans se connecter à un serveur :
 .\dist\win-x64\EclatServerPanel.exe --demo
 ```
 
-Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. La préversion fournit vingt joueurs, des groupes de cinq et douze personnes, des positions anciennes, un compte banni et un évènement actif. Les commandes y modifient seulement les données simulées.
+Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. Il fournit vingt joueurs, des groupes de cinq et douze personnes, des positions anciennes, un compte banni et un évènement actif. Les commandes y modifient seulement les données simulées.
 
 `--capture-demo-pages DOSSIER` enregistre chaque page, les trois présentations de la liste, les groupes ouverts, les écrans d’administration et leurs confirmations.
 
@@ -140,3 +145,9 @@ Après toute installation, vérifier séparément l’accès SSH, les réponses 
 ## Licence
 
 Code sous [licence MIT](LICENSE). Les noms de jeux et marques mentionnés restent la propriété de leurs détenteurs. Ce projet ne distribue aucun contenu Nintendo et n’est pas affilié à Nintendo, Game Freak ou The Pokémon Company.
+
+## Intégration de la version 1.2.0
+
+Les corrections de `codex/admin-controls-isolated` (`e29d0ee`) sont réunies avec la carte et l’administration avancée dans cette version : profils SSH conservés, sélecteur sombre, présentation allégée et interrupteurs **Données brutes** réparés dans Sessions et Diagnostic. La fermeture depuis les salons et celle depuis Administration passent toutes deux par le canal unique du serveur compatible.
+
+Les [preuves du contrôle isolé](docs/evidence/admin-controls/README.md) décrivent l’état testé avant la fusion. Elles restent un relevé historique ; les anciens chemins de branche et le canal limité qu’elles mentionnent ne sont pas une seconde installation à utiliser avec la 1.2.0. La [validation du panneau intégré](docs/carte-commandes.md#validation-de-la-version-120) précise les essais locaux et leurs limites. Les profils, clés et données de joueurs restent privés ; les captures publiées sont fictives.

@@ -1,8 +1,8 @@
 # Carte des joueurs et commandes d’administration
 
-Ces fonctions sont proposées en préversion dans la PR du panel. La version publiée 1.1.1 conserve les fonctions précédentes ; elle ne contient pas ces nouveaux écrans. La préversion demande également le [serveur de la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et l’outil Linux fourni avec cette branche.
+La version 1.2.0 rassemble la carte des joueurs, les commandes d’administration et les corrections des contrôles et des profils SSH. Ces fonctions demandent le [serveur compatible de la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et l’outil Linux correspondant.
 
-La validation décrite ici a été faite sur le PC et dans des serveurs locaux temporaires. Aucun VPS n’a été modifié pour préparer ou tester ces changements. Leur installation sur le serveur de jeu reste une étape distincte.
+La validation décrite ici a été faite sur le PC et dans des serveurs locaux temporaires. Aucun VPS n’a été contacté ou modifié pour cette intégration. Installer l’application Windows ne met pas à jour le serveur de jeu ; l’installation des composants Linux reste une étape distincte.
 
 ## Lire la carte
 
@@ -49,6 +49,8 @@ La page Administration charge les joueurs connectés, les comptes connus, les ba
 
 Les commandes sont exécutées l’une après l’autre. Une confirmation annulée n’envoie aucune mutation. Les cibles chargées pour un autre hôte sont refusées. Après une commande, le panel relit l’état ; si l’échange expire, il ne répète pas la commande. Consulter le journal avant une nouvelle tentative lorsque le résultat reste incertain.
 
+Avant de fermer un salon, le serveur règle les récompenses déjà acquises pendant les combats. Si ce règlement échoue, il refuse la fermeture avec `ROOM_REWARD_PENDING` et ne retire aucun joueur. La fermeture ne sauvegarde pas la partie qui reste sur le PC du joueur.
+
 Le mode maintenance ne doit pas provoquer de redémarrage par le contrôle de disponibilité : le refus volontaire de nouvelles connexions prouve que le jeu répond. Le nombre de joueurs encore connectés reste visible dans l’administration.
 
 ## Comptes et journal
@@ -88,7 +90,11 @@ Les tours gratuits n’ajoutent pas de mise. Les remboursements administratifs s
 
 Les contrôles habituels du service, les journaux et les sauvegardes gardent leurs actions existantes. Le nouvel outil accepte aussi la forme de requête de la version 1.1.1. La carte exige les nouveaux champs du suivi du serveur ; les commandes exigent son canal Unix local, et l’édition de configuration exige son validateur Node.js. Un ancien serveur ne peut pas fournir ces fonctions par une simple mise à jour de l’application Windows. Les salons de plus de deux joueurs demandent le client 0.6.0 qui contient déjà la prise en charge des dix joueurs ; ces PR ne reconstruisent pas la ROM.
 
+La connexion actuelle de `connection.json` et les profils de `connections.json` sont repris. Le sélecteur utilise le thème sombre ; choisir un autre hôte efface les anciennes positions, les cibles, l’historique affiché et le journal avant un nouveau contrôle. Les interrupteurs Données brutes de Sessions et Diagnostic ont été réparés et font partie des tests de l’interface.
+
 Le panel conserve son accès SSH limité. Les commandes passent ensuite par une socket privée sur le VPS, sans port d’administration réseau supplémentaire. Les actions ajoutées sont `admin.overview`, `admin.audit`, `admin.command`, `config.get`, `config.save`, `config.history`, `config.restore` et `statistics`.
+
+Les corrections de la branche `codex/admin-controls-isolated` (`e29d0ee`) sont intégrées à la 1.2.0. Le bouton de fermeture dans les salons et la commande de la page Administration utilisent le même canal. Les [preuves de cette branche](evidence/admin-controls/README.md) conservent leurs résultats historiques ; elles ne décrivent pas un second canal à installer à côté du serveur actuel.
 
 Le [guide de déploiement](deploiement.md) décrit les chemins et les services. Le [contrat de l’outil Linux](administration-linux.md) précise les arguments, les limites et les essais. Les [notes de sécurité](securite.md) décrivent les accès et les données privées.
 
@@ -98,7 +104,7 @@ Les sauvegardes et le jeu restent sur le PC du joueur. Le panel ne peut pas tél
 
 Le mode démo utilise uniquement des données simulées. Il présente vingt joueurs, dont des groupes de cinq et douze, des positions anciennes, un joueur sans position, un compte banni et un évènement actif. Ses commandes ne contactent aucun serveur.
 
-## Validation de cette préversion
+## Validation de la version 1.2.0
 
 Le 23 octobre 2026, les 66 tests Python ont réussi sous Linux, dont deux essais avec le vrai serveur de développement compilé et le vrai validateur Node.js. Ils couvrent le canal local, les huit commandes, les refus, les écritures et restaurations de configuration, les confirmations par checksum et les statistiques en lecture seule. Les bases, fichiers et sockets de ces essais sont temporaires. L’appartenance du processus à systemd est simulée pour le serveur d’essai local.
 

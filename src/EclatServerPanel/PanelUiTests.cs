@@ -14,6 +14,8 @@ internal static class PanelUiTests
     internal static async Task RunAsync()
     {
         Check(Application.Current is not null && Application.Current.Dispatcher.CheckAccess(), "UI tests require the WPF dispatcher.");
+        ProfilePersistence();
+        await SavedConnectionSelectionAsync();
         await RawSwitchesAsync();
         await RoomClosureAsync();
         await MonitorAndNetworkAsync();
@@ -24,6 +26,47 @@ internal static class PanelUiTests
         await RestartFreshnessAsync();
         await RestoreConfirmationAsync();
         await ConnectionResetAsync();
+    }
+
+    private static void ProfilePersistence()
+    {
+        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "eclat-profiles-" + Guid.NewGuid());
+        System.IO.Directory.CreateDirectory(directory);
+        try
+        {
+            var key = System.IO.Path.Combine(directory, "synthetic-key"); System.IO.File.WriteAllText(key, "synthetic fixture");
+            var path = System.IO.Path.Combine(directory, "connection.json");
+            var profiles = System.IO.Path.Combine(directory, "connections.json");
+            var first = new ConnectionSettings { Host = "one.invalid", KeyPath = key };
+            System.IO.File.WriteAllText(path, JsonSerializer.Serialize(first));
+            var second = first with { Host = "two.invalid" }; second.Save(path, profiles);
+            var loaded = ConnectionSettings.LoadProfiles(profiles, ConnectionSettings.Load(path));
+            Check(loaded.Count == 2 && loaded.Contains(first) && loaded.Contains(second), "Saving another server must retain the legacy connection.");
+            var updated = second with { KeyPath = key + "2" }; System.IO.File.WriteAllText(updated.KeyPath, "synthetic fixture"); updated.Save(path, profiles);
+            loaded = ConnectionSettings.LoadProfiles(profiles, ConnectionSettings.Load(path));
+            Check(loaded.Count == 2 && loaded.Contains(updated) && !loaded.Contains(second), "Saving an existing endpoint must update its profile without duplicates.");
+            Check(ConnectionSettings.Load(path) == updated, "The last saved connection must survive restart.");
+        }
+        finally { System.IO.Directory.Delete(directory, true); }
+    }
+
+    private static async Task SavedConnectionSelectionAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        var picker = Find<ComboBox>(test.Window, "SavedConnections");
+        Check(picker.Items.Count == 1 && picker.Items.OfType<ConnectionSettings>().Single() == test.Settings, "Injected test settings must isolate the picker from real user profiles.");
+        var other = test.Settings with { Host = "second.invalid", User = "second", Port = 2222, KeyPath = "synthetic-second" };
+        picker.ItemsSource = new[] { test.Settings, other };
+        int callsBefore = test.Transport.Calls.Count;
+        picker.SelectedItem = other;
+        Check(Text(test.Window, "HostBox") == other.Host && Text(test.Window, "UserBox") == other.User && Text(test.Window, "PortBox") == "2222" && Text(test.Window, "KeyBox") == other.KeyPath, "Selecting a saved connection must populate its entire form.");
+        Check(test.Transport.Calls.Count == callsBefore, "Selecting a profile must not contact its host before an explicit action.");
+        Find<RadioButton>(test.Window, "NavConnection").IsChecked = true;
+        await test.Window.Dispatcher.InvokeAsync(() => test.Window.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+        picker.ApplyTemplate(); picker.IsDropDownOpen = true;
+        await Task.Delay(100);
+        Check(picker.IsDropDownOpen, "The saved connection menu must open.");
+        picker.IsDropDownOpen = false;
     }
 
     private static async Task RawSwitchesAsync()
@@ -52,12 +95,30 @@ internal static class PanelUiTests
         await test.Window.RefreshAsync();
         var rooms = Find<ItemsControl>(test.Window, "RoomCards");
         Check(rooms.Items.OfType<RoomItem>().All(room => room.Id.Length > 0 && room.Origin == test.Settings), "Room actions must retain the ID and originating connection.");
-        var transport = new DemoTransport();
-        await transport.SendAsync(test.Settings, "close-room", "r1");
-        var status = await transport.SendAsync(test.Settings, "status");
-        Check(!status.GetProperty("monitor").GetProperty("rooms").EnumerateArray().Any(room => room.GetProperty("id").GetString() == "r1"), "Closed room must disappear.");
-        Check(!status.GetProperty("monitor").GetProperty("players").EnumerateArray().Any(player => player.GetProperty("roomId").GetString() == "r1"), "Closed room members must disconnect.");
-        Check(status.GetProperty("monitor").GetProperty("rooms").GetArrayLength() == 2, "Other rooms must remain open.");
+        int initialRoomCount = rooms.Items.Count;
+        var chosen = rooms.Items.OfType<RoomItem>().First();
+        Check(initialRoomCount == 3 && Guid.TryParse(chosen.Id, out _), "Room controls must use the current three-room UUID fixture.");
+        var cancelled = test.Window.CloseRoomAsync(chosen);
+        await DialogAsync(test.Window, "room cancellation");
+        Click(test.Window, "DialogCancel"); await Bounded(cancelled, "cancel room closure");
+        Check(test.Transport.Count("close-room") == 0, "Cancellation must send no room closure.");
+        await DialogClosedAsync(test.Window);
+        var confirmed = test.Window.CloseRoomAsync(chosen);
+        await DialogAsync(test.Window, "room closure");
+        var input = Find<TextBox>(test.Window, "DialogInput");
+        input.Text = chosen.Name + " incorrect";
+        Click(test.Window, "DialogConfirm");
+        Check(!confirmed.IsCompleted && test.Transport.Count("close-room") == 0, "A mismatched room name must not confirm the destructive action.");
+        input.Text = chosen.Name;
+        Click(test.Window, "DialogConfirm"); await Bounded(confirmed, "confirmed room closure");
+        Check(test.Transport.Count("close-room") == 1 && test.Transport.Calls.Single(call => call.Action == "close-room").Name == chosen.Id, "Exact-name confirmation must send one closure for the selected UUID.");
+        Check(rooms.Items.OfType<RoomItem>().All(room => room.Id != chosen.Id) && rooms.Items.Count == initialRoomCount - 1, "Only the chosen room must disappear after the status check.");
+        Check(Find<ItemsControl>(test.Window, "PlayerList").Items.Count == 20, "Closing a room must preserve game connections while members leave the room.");
+        await DialogClosedAsync(test.Window);
+        test.Window.ApplyConnection(test.Settings with { Host = "other.invalid" });
+        int callsBefore = test.Transport.Calls.Count;
+        await Bounded(test.Window.CloseRoomAsync(chosen), "stale room origin");
+        Check(test.Transport.Calls.Count == callsBefore && test.Transport.Count("close-room") == 1, "Old room actions must not contact a different connection.");
         try { SshTransport.ValidateRequest("close-room", "../../bad"); throw new Exception("Invalid ID accepted"); }
         catch (InvalidOperationException) { }
     }

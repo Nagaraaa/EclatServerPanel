@@ -429,7 +429,7 @@
           <Grid Margin="0,0,6,8">
             <Grid.ColumnDefinitions><ColumnDefinition MaxWidth="760"/><ColumnDefinition Width="22"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
             <StackPanel>
-              <TextBlock Text="CONNEXIONS ENREGISTRÉES" Style="{StaticResource Overline}"/><ComboBox x:Name="SavedConnections" DisplayMemberPath="Label" SelectionChanged="SavedConnection_Changed" Margin="0,0,0,16" MinHeight="36" AutomationProperties.Name="Connexions enregistrées"/>
+              <TextBlock Text="CONNEXIONS ENREGISTRÉES" Style="{StaticResource Overline}"/><ComboBox Style="{StaticResource ConnectionPicker}" x:Name="SavedConnections" DisplayMemberPath="Label" SelectionChanged="SavedConnection_Changed" Margin="0,0,0,16" MinHeight="36" AutomationProperties.Name="Connexions enregistrées"/>
               <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
                   <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="1" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>

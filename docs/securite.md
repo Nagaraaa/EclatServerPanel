@@ -8,7 +8,7 @@ L’outil privilégié accepte des actions définies à l’avance. Les noms de 
 
 Les opérations de service et de restauration ont besoin de privilèges sur le VPS. Une règle `sudo` doit viser uniquement l’outil d’administration, jamais un shell, un interpréteur généraliste ou `systemctl` sans restriction. L’installation initiale se fait avec un accès administrateur distinct.
 
-Dans la préversion carte et commandes, le serveur ouvre une socket Unix locale, réservée au compte du service avec les droits `0600`. L’outil vérifie son propriétaire et l’identité du processus qui répond. Le canal reste sur le VPS et n’ajoute aucun port réseau. Il accepte une liste fermée de commandes dont les arguments sont vérifiés par l’outil puis par le serveur.
+Dans la version 1.2.0 carte et commandes, le serveur ouvre une socket Unix locale, réservée au compte du service avec les droits `0600`. L’outil vérifie son propriétaire et l’identité du processus qui répond. Le canal reste sur le VPS et n’ajoute aucun port réseau. Il accepte une liste fermée de commandes dont les arguments sont vérifiés par l’outil puis par le serveur.
 
 Les opérations qui modifient l’état partagent un verrou. Chaque commande reçoit un identifiant propre et le serveur conserve son résultat pour éviter un second crédit si la même requête est répétée. Le panel ne recommence pas automatiquement une commande après un délai dépassé : son résultat peut être inconnu. Lire l’état et le journal avant une nouvelle tentative.
 
@@ -76,4 +76,4 @@ Avec les nouvelles fonctions, cette clé permet aussi de consulter les positions
 
 Le contrôle de disponibilité vérifie le protocole attendu. Il ne garantit pas qu’une partie entière fonctionne, que le tunnel public reste accessible depuis tous les réseaux ou que le VPS ne subira pas de panne.
 
-Les statistiques ouvrent la base en lecture seule. L’activité quotidienne des comptes n’est connue qu’à partir de l’installation du suivi correspondant. Si seule l’activité économique d’une ancienne base est disponible, sa portée est indiquée. Les essais de cette préversion utilisent des données temporaires locales ; ils n’ont pas modifié le VPS de jeu.
+Les statistiques ouvrent la base en lecture seule. L’activité quotidienne des comptes n’est connue qu’à partir de l’installation du suivi correspondant. Si seule l’activité économique d’une ancienne base est disponible, sa portée est indiquée. Les essais de cette version 1.2.0 utilisent des données temporaires locales ; ils n’ont pas modifié le VPS de jeu.

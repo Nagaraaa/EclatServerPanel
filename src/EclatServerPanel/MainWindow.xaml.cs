@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     static readonly string[] AvatarColors = ["#5EE6FF", "#8B7BFF", "#3DDC97", "#FFB547", "#FF8EA3", "#7FB2FF"];
     private readonly IPanelTransport transport;
     private readonly bool demo;
+    private readonly bool isolatedSettings;
     private ConnectionSettings settings;
     private bool busy;
     private bool closed, lastCheckFailed;
@@ -49,6 +50,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         this.demo = demo;
+        isolatedSettings = injectedSettings is not null;
         transport = injectedTransport ?? (demo ? new DemoTransport() : new SshTransport());
         settings = injectedSettings ?? (demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load());
         pages = new() { ["Overview"] = OverviewPage, ["Sessions"] = SessionsPage, ["Logs"] = LogsPage, ["Backups"] = BackupsPage, ["Diagnostics"] = DiagnosticsPage, ["Connection"] = ConnectionPage };
@@ -883,7 +885,7 @@ public partial class MainWindow : Window
 
     private void ReloadConnections()
     {
-        SavedConnections.ItemsSource = demo ? new[] { settings } : ConnectionSettings.LoadProfiles();
+        SavedConnections.ItemsSource = demo || isolatedSettings ? new[] { settings } : ConnectionSettings.LoadProfiles();
         SavedConnections.SelectedItem = ((IEnumerable<ConnectionSettings>)SavedConnections.ItemsSource).FirstOrDefault(p => p == settings);
     }
 
@@ -898,7 +900,10 @@ public partial class MainWindow : Window
     private async void CloseRoom_Click(object sender, RoutedEventArgs e)
     {
         if (((FrameworkElement)sender).DataContext is not RoomItem room) return;
-        await RunAsync("Fermeture du salon…", async () =>
+        await CloseRoomAsync(room);
+    }
+
+    internal Task CloseRoomAsync(RoomItem room) => RunAsync("Fermeture du salon…", async () =>
         {
             if (room.Origin != ActiveSettings) throw new InvalidOperationException("La connexion a changé. Actualisez la liste des salons.");
             if (!await ConfirmAsync("Fermer ce salon ?", $"{room.Name} : les {room.Count} joueur(s) quitteront le salon. Le salon sera supprimé.", "Fermer le salon", danger: true, requiredText: room.Name) || closed) return;
@@ -906,7 +911,6 @@ public partial class MainWindow : Window
             RenderStatus(await transport.SendAsync(ActiveSettings, "status"));
             Toast("Salon fermé.");
         });
-    }
 
     private async void Trust_Click(object sender, RoutedEventArgs e)
     {
