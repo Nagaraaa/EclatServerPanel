@@ -31,6 +31,7 @@ internal static class PanelResponse
             switch (action)
             {
                 case "status": ValidateStatus(data); break;
+                case "monitor": ValidateService(Property(data, "service")); Require(Property(data, "monitor").ValueKind == JsonValueKind.Object); break;
                 case "diagnostics":
                     ValidateStatus(Property(data, "status"));
                     Require(String(data, "journal").Length <= 131072);

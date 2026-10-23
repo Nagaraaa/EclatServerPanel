@@ -16,8 +16,17 @@ La réponse garde l’enveloppe existante : `{"ok":true,"data":{...}}` ou `{"ok"
 | `config.history` | Aucun | `items` : `id`, `modifiedUtc`, `sha256`, `reason`. |
 | `config.restore` | `requestId`, `version`, `expectedSha256`, `reason` | Même résultat que l’enregistrement. |
 | `statistics` | Aucun | `totals`, `drawsByBanner`, `casinoByGame`, `refundTotals`, `activePlayersByDay` et portée des chiffres. |
+| `monitor` | Aucun | `service` et `monitor` seulement (joueurs, positions, salons). Pas de connexion de contrôle au jeu ni de lancement de Node : la carte s’actualise ainsi toutes les 5 secondes. |
 
-Les actions existantes restent disponibles. L’action `close-room` conserve la compatibilité avec le bouton de fermeture de salon existant et utilise désormais le même canal versionné que `room.close`.
+Les actions existantes restent disponibles.
+
+## Session
+
+Une requête `{"action":"session"}` ouvre une session : l’outil répond `{"ok":true,"data":{"session":1,"idleSeconds":600}}`, puis traite une requête JSON par ligne et renvoie une réponse par ligne, jusqu’à la fin de l’entrée, après 10 minutes sans requête ou après 4 heures. Le panel garde ainsi une seule connexion SSH au lieu d’une poignée de main par actualisation (OpenSSH sous Windows ne mutualise pas les connexions).
+
+Chaque requête de la session est validée et verrouillée exactement comme un appel isolé ; une erreur ne ferme pas la session. Le panel ne répète jamais une mutation après une coupure de session ; il reprend une lecture par un appel isolé. Face à un outil antérieur, qui attend la fin de l’entrée, le panel abandonne la session après 20 secondes et revient à un appel par action pendant 6 heures (ou jusqu’au redémarrage du panel).
+
+La version de Node affichée dans l’état est mise en cache dans `/run/eclat-panel-node-version.json` et recalculée seulement quand l’exécutable change. Les empreintes SHA-256 des sauvegardes sont calculées par blocs de 1 Mio. L’action `close-room` conserve la compatibilité avec le bouton de fermeture de salon existant et utilise désormais le même canal versionné que `room.close`.
 
 `requestId` est un UUID propre à l’opération. Le serveur conserve le résultat des mutations afin qu’une répétition de la même requête n’ajoute pas un second crédit. Les changements de configuration refusent un identifiant déjà utilisé ; recharger leur état et consulter le journal avant une nouvelle tentative. Toutes les mutations prennent le même verrou d’opération que les sauvegardes et les restaurations SQLite.
 

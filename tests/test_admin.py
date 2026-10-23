@@ -136,6 +136,59 @@ class TestAdmin(unittest.TestCase):
         self.assertEqual(result['service'], service)
         self.assertIs(result['monitor']['processCurrent'], False)
 
+    def test_live_monitor_skips_game_probe_and_node(self):
+        (self.data / 'monitor.json').write_text(json.dumps({'players': [{'id': 'p1', 'name': 'Alice'}], 'rooms': []}))
+        with patch.object(self.admin, 'service_state', return_value={'active': 'active', 'pid': 0}), \
+             patch.object(self.admin, 'protocol') as probe, patch.object(self.admin, 'command') as command:
+            result = self.admin.dispatch({'action': 'monitor'})
+        probe.assert_not_called()
+        command.assert_not_called()
+        self.assertEqual(result['monitor']['players'][0]['name'], 'Alice')
+        self.assertEqual(result['service']['active'], 'active')
+
+    def test_node_version_is_cached_until_binary_changes(self):
+        binary = self.root / 'node'
+        binary.write_text('#!/bin/sh\n')
+        with patch.object(MODULE, 'NODE_VERSION_CACHE', self.root / 'node-version.json'), \
+             patch.object(self.admin, 'command', return_value='v24.14.0') as command:
+            self.assertEqual(self.admin.node_version(binary), 'v24.14.0')
+            self.assertEqual(self.admin.node_version(binary), 'v24.14.0')
+            self.assertEqual(command.call_count, 1)
+            os.utime(binary, ns=(1, 1))
+            self.admin.node_version(binary)
+            self.assertEqual(command.call_count, 2)
+
+    def test_file_hash_matches_whole_file_hash(self):
+        path = self.root / 'blob'
+        path.write_bytes(os.urandom(3 * 1024 * 1024 + 17))
+        self.assertEqual(MODULE.file_sha256(path), hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_session_answers_each_line_and_keeps_errors_per_request(self):
+        read, write = os.pipe()
+        os.write(write, b'{"action": "monitor"}\n{"action": "nope"}\n{"action": "session"}\n')
+        os.close(write)
+        output = io.StringIO()
+        stdin = io.TextIOWrapper(os.fdopen(read, 'rb'))
+        self.addCleanup(stdin.close)
+        with patch.object(MODULE.sys, 'stdin', stdin), patch.object(MODULE.sys, 'stdout', output), \
+             patch.object(self.admin, 'live', return_value={'monitor': {}}):
+            MODULE.serve_session(self.admin)
+        replies = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(replies[0], {'ok': True, 'data': {'session': 1, 'idleSeconds': MODULE.SESSION_IDLE_SECONDS}})
+        self.assertEqual(replies[1], {'ok': True, 'data': {'monitor': {}}})
+        self.assertFalse(replies[2]['ok'])
+        self.assertFalse(replies[3]['ok'])
+        self.assertEqual(len(replies), 4)
+
+    def test_first_line_keeps_following_bytes_for_the_session(self):
+        read, write = os.pipe()
+        os.write(write, b'{"action": "session"}\n{"action": "monitor"}\n')
+        os.close(write)
+        raw, rest = MODULE.read_first_line(read)
+        os.close(read)
+        self.assertEqual(json.loads(raw), {'action': 'session'})
+        self.assertEqual(rest, b'{"action": "monitor"}\n')
+
     def test_rejects_unknown_actions_and_fields(self):
         for payload in ({'action': 'shell'}, {'action': 'start', 'command': 'id'}, {'action': ['status']}, {}, [], None):
             with self.subTest(payload=payload), self.assertRaises(ValueError):

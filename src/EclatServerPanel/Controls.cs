@@ -8,6 +8,25 @@ namespace EclatServerPanel;
 
 internal static class Motion
 {
+    /// <summary>
+    /// Updates a bound list in place: unchanged rows keep their containers,
+    /// selection and scroll position instead of being rebuilt on every poll.
+    /// </summary>
+    public static void Sync<T>(System.Windows.Controls.ItemsControl control, IReadOnlyList<T> items)
+    {
+        if (control.ItemsSource is not System.Collections.ObjectModel.ObservableCollection<T> list)
+        {
+            control.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<T>(items);
+            return;
+        }
+        for (int index = 0; index < items.Count; index++)
+        {
+            if (index >= list.Count) list.Add(items[index]);
+            else if (!EqualityComparer<T>.Default.Equals(list[index], items[index])) list[index] = items[index];
+        }
+        while (list.Count > items.Count) list.RemoveAt(list.Count - 1);
+    }
+
     public static readonly IEasingFunction Out = new CubicEase { EasingMode = EasingMode.EaseOut };
     public static readonly IEasingFunction InOut = new CubicEase { EasingMode = EasingMode.EaseInOut };
 

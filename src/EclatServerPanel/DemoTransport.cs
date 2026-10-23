@@ -36,6 +36,9 @@ public sealed partial class DemoTransport : IPanelTransport
             switch (action)
             {
                 case "status": data = Status(); break;
+                case "monitor":
+                    var live = JsonSerializer.SerializeToElement(Status());
+                    data = new { service = live.GetProperty("service"), monitor = live.GetProperty("monitor") }; break;
                 case "close-room":
                     string roomToClose = LegacyRoomId(name!);
                     int removed = CloseDemoRoom(roomToClose);

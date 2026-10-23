@@ -6,6 +6,8 @@ Le panel passe par OpenSSH et une clé privée conservée sur votre PC. Le serve
 
 **La version 1.2.0 réunit la carte, les commandes d’administration et les corrections des contrôles du panel.** La carte et les commandes demandent aussi le [serveur compatible de la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et l’outil Linux correspondant. Installer l’application Windows ne les installe pas sur le VPS. La validation de cette version utilise des serveurs locaux temporaires ; aucun VPS n’a été contacté ou modifié pour cette intégration.
 
+**La version 1.3.0 refait la carte, les commandes et les statistiques, et allège les échanges avec le VPS.** La carte dessine toute la région transmise par le serveur (terres, routes, villes et lieux), avec des pastilles par salon, un éventail animé pour les groupes et un panneau de détail du joueur choisi. Les commandes se choisissent par tuiles, les statistiques s’affichent en chiffres clés et en barres. Le panel garde une seule connexion SSH ouverte quand l’outil Linux 1.3.0 est installé, actualise la carte toutes les 5 secondes par une lecture légère et suspend ses contrôles quand la fenêtre est réduite. Avec un outil Linux plus ancien, il revient à une connexion par action.
+
 ![Vue d’ensemble du panel en mode démonstration](docs/panel.png)
 
 *Aperçu avec des données fictives.*
@@ -21,10 +23,12 @@ L’interface sombre présente l’état du jeu, ses ressources, ses joueurs et 
 | Carte et tableau | Groupe de cinq joueurs | Groupe de douze joueurs |
 | --- | --- | --- |
 | ![Carte et liste des joueurs fictifs](docs/captures/map-table.png) | ![Joueurs ouverts en éventail](docs/captures/map-fan.png) | ![Liste d’un groupe de plus de huit joueurs](docs/captures/map-crowd.png) |
+| **Par lieu** | **Fiches** | **Statistiques** |
+| ![Joueurs regroupés par lieu](docs/captures/map-places.png) | ![Fiches des joueurs](docs/captures/map-cards.png) | ![Chiffres clés et barres](docs/captures/statistics.png) |
 
 | Commandes d’administration | Confirmation par saisie |
 | --- | --- |
-| ![Commandes disponibles dans la version 1.2.0](docs/captures/commands.png) | ![Confirmation du montant d’une modification de solde](docs/captures/admin-confirmation.png) |
+| ![Tuiles des commandes d’administration](docs/captures/commands.png) | ![Confirmation du montant d’une modification de solde](docs/captures/admin-confirmation.png) |
 
 *Toutes les captures utilisent des données de démonstration.*
 

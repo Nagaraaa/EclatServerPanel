@@ -15,7 +15,7 @@ public interface IPanelTransport
 
 public sealed partial class SshTransport : IPanelTransport
 {
-    private static readonly HashSet<string> Actions = ["status", "logs", "start", "stop", "restart", "backup", "backups", "download", "restore", "diagnostics", "close-room"];
+    private static readonly HashSet<string> Actions = ["status", "monitor", "logs", "start", "stop", "restart", "backup", "backups", "download", "restore", "diagnostics", "close-room"];
     public async Task<JsonElement> SendAsync(ConnectionSettings settings, string action, string? name = null)
     {
         settings = settings.Snapshot();
@@ -25,7 +25,8 @@ public sealed partial class SshTransport : IPanelTransport
         var args = BuildArguments(settings, ConnectionSettings.KnownHostsPath);
         var request = JsonSerializer.Serialize(new { action, name });
         int timeout = action switch { "restore" => 360, "start" or "stop" or "restart" => 90, "backup" or "download" => 120, _ => 35 };
-        var output = await ProcessRunner.RunAsync("ssh.exe", args, request + "\n", TimeSpan.FromSeconds(timeout), action == "download" ? 96 * 1024 * 1024 : 4 * 1024 * 1024).ConfigureAwait(false);
+        bool mutation = action is "start" or "stop" or "restart" or "backup" or "restore" or "close-room";
+        var output = await ExchangeAsync(args, request, TimeSpan.FromSeconds(timeout), action == "download" ? 96 * 1024 * 1024 : 4 * 1024 * 1024, mutation).ConfigureAwait(false);
         if (output.Code != 0)
         {
             var remoteError = ParseRemoteError(output.Text);
