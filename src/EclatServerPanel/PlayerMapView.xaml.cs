@@ -23,10 +23,12 @@ public partial class PlayerMapView : UserControl
         PlayerTable.ItemsSource = tableView; PlayerCards.ItemsSource = cardView; PlayerPlaces.ItemsSource = placeView;
         MapCanvas.Model = Model;
         MapCanvas.Selected += id => Select(id, false);
-        MapCanvas.CrowdRequested += group => { CrowdTitle.Text = $"{group.Players.Count} joueurs · {group.Section.Name}"; CrowdRows.ItemsSource = group.Players; CrowdPanel.Visibility = Visibility.Visible; CrowdRows.SelectedItem = group.Players.FirstOrDefault(player => player.Id == selectedId); };
+        MapCanvas.CrowdRequested += group => { CrowdTitle.Text = $"{group.Players.Count} joueurs à {group.Section.Name}"; CrowdRows.ItemsSource = group.Players; CrowdPanel.Visibility = Visibility.Visible; CrowdRows.SelectedItem = group.Players.FirstOrDefault(player => player.Id == selectedId); };
         MapCanvas.CrowdClosed += () => CrowdPanel.Visibility = Visibility.Collapsed;
+        SearchBox.TextChanged += (_, _) => SearchHint.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         TableMode.IsChecked = true;
         ResetFilters();
+        UpdateSkin();
     }
     internal void Apply(JsonElement monitor, bool available)
     {
@@ -45,8 +47,22 @@ public partial class PlayerMapView : UserControl
             if (crowd is null || crowd.Players.Count <= 8) CrowdPanel.Visibility = Visibility.Collapsed;
             else { CrowdRows.ItemsSource = crowd.Players; CrowdRows.SelectedItem = crowd.Players.FirstOrDefault(player => player.Id == selectedId); }
         }
-        MapSummary.Text = available ? $"{Model.Players.Count} joueurs · positions de plus de 10 s estompées · survolez un groupe pour l’ouvrir" : "Activité non confirmée — actualisez avec un serveur compatible.";
+        MapSummary.Text = available ? $"{Model.Players.Count} connectés · positions de plus de 10 s estompées · survolez un groupe pour l’ouvrir" : "Activité non confirmée — actualisez avec un serveur compatible.";
+        Summarize(available);
+        MapCanvas.UpdateClock();
         Dispatcher.BeginInvoke(() => { foreach (var scroll in scrolls) scroll.Scroll?.ScrollToVerticalOffset(scroll.Offset); });
+    }
+    // Map headline, room legend and busiest places, from the same model as the lists.
+    private void Summarize(bool available)
+    {
+        int placed = Model.Players.Count(player => player.HasPlace);
+        MapHeadline.Text = !available ? "En attente du serveur" : placed == 0 ? "Aucun joueur placé" : $"{placed} joueur{(placed > 1 ? "s" : "")} sur la carte";
+        RoomLegend.ItemsSource = Model.Players.GroupBy(player => player.RoomId).OrderByDescending(group => group.Count())
+            .Select(group => new LegendItem(group.First().RoomBrush, group.First().Room, group.Count().ToString(System.Globalization.CultureInfo.InvariantCulture))).ToList();
+        var places = Model.Groups().OrderByDescending(group => group.Players.Count).Take(5).ToList();
+        int most = places.Count == 0 ? 1 : places[0].Players.Count;
+        BusyPlaces.ItemsSource = places.Select(group => new PlaceItem(group.Section.Name, group.Players.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            new GridLength(group.Players.Count, GridUnitType.Star), new GridLength(most - group.Players.Count, GridUnitType.Star))).ToList();
     }
     private void ResetFilters()
     {
@@ -83,16 +99,20 @@ public partial class PlayerMapView : UserControl
         var player = Model.Players.FirstOrDefault(player => player.Id == id);
         PlayerTable.SelectedItem = player; PlayerCards.SelectedItem = player; PlayerPlaces.SelectedItem = player;
         CrowdRows.SelectedItem = player;
+        Inspector.DataContext = player;
+        Inspector.Visibility = player is null ? Visibility.Collapsed : Visibility.Visible;
+        PlacesSummary.Visibility = player is null ? Visibility.Visible : Visibility.Collapsed;
         MapCanvas.Select(id, open);
         selecting = false;
     }
     internal void Tick() { foreach (var player in Model.Players) player.Tick(); MapCanvas.InvalidateVisual(); }
     internal void CloseOverlay() => MapCanvas.Collapse();
-    internal void Clear() { updating = true; selectedId = null; Model.Clear(); SearchBox.Text = ""; ResetFilters(); MapCanvas.Collapse(); updating = false; RefreshViews(); MapSummary.Text = "En attente du serveur."; }
+    internal void Clear() { updating = true; selectedId = null; Model.Clear(); SearchBox.Text = ""; ResetFilters(); MapCanvas.Collapse(); updating = false; RefreshViews(); MapSummary.Text = "En attente du serveur."; Summarize(false); Inspector.Visibility = Visibility.Collapsed; PlacesSummary.Visibility = Visibility.Visible; MapCanvas.UpdateClock(); }
     internal void CaptureMode(string mode, int groupSize = 0)
     {
         (mode == "cards" ? CardsMode : mode == "places" ? PlacesMode : TableMode).IsChecked = true;
         if (groupSize > 0 && Model.Groups().FirstOrDefault(group => group.Players.Count == groupSize) is { } group) Select(group.Players[0].Id, true);
+        MapCanvas.Settle();
     }
     private static ScrollViewer? FindScroll(DependencyObject element)
     {
@@ -100,5 +120,41 @@ public partial class PlayerMapView : UserControl
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++) if (FindScroll(VisualTreeHelper.GetChild(element, i)) is { } child) return child;
         return null;
     }
+    // ---- Town Map read from the administrator's ROM --------------------------
+    private System.Windows.Media.Imaging.BitmapSource? townMap = TownMap.LoadCached();
+    private bool allowGameMap = true;
+    /// <summary>False in the demonstration, whose synthetic region does not match the game's map.</summary>
+    internal bool AllowGameMap { get => allowGameMap; set { allowGameMap = value; UpdateSkin(); } }
+    internal event Action<string, bool>? Notice;
+    private void UpdateSkin()
+    {
+        if (!allowGameMap) { MapSkin.Visibility = Visibility.Collapsed; MapCanvas.Picture = null; return; }
+        MapSkin.Visibility = Visibility.Visible;
+        bool has = townMap is not null;
+        RomButton.Visibility = has ? Visibility.Collapsed : Visibility.Visible;
+        GameMapMode.Visibility = SchemaMode.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+        if (has && GameMapMode.IsChecked != true && SchemaMode.IsChecked != true) GameMapMode.IsChecked = true;
+        MapCanvas.Picture = has && GameMapMode.IsChecked == true ? townMap : null;
+    }
+    private void Skin_Changed(object sender, RoutedEventArgs e) { if (MapCanvas is not null) UpdateSkin(); }
+    private async void ImportRom_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "Choisir la ROM Rouge Feu d’origine", Filter = "ROM Game Boy Advance (*.gba)|*.gba|Tous les fichiers (*.*)|*.*", CheckFileExists = true };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        RomButton.IsEnabled = false;
+        try
+        {
+            var (map, label) = await Task.Run(() => TownMap.ImportFromRom(dialog.FileName));
+            townMap = map;
+            GameMapMode.IsChecked = true;
+            UpdateSkin();
+            Notice?.Invoke($"Carte du jeu lue dans la ROM {label}. L’image reste sur ce PC ; la ROM n’est pas copiée.", false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.IO.IOException or UnauthorizedAccessException) { Notice?.Invoke(ex.Message, true); }
+        finally { RomButton.IsEnabled = true; }
+    }
+
     private sealed record Choice(string Id, string Label);
+    private sealed record LegendItem(System.Windows.Media.Brush Brush, string Name, string Count);
+    private sealed record PlaceItem(string Name, string Count, GridLength Fill, GridLength Rest);
 }

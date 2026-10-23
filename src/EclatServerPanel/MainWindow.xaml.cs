@@ -22,6 +22,10 @@ public partial class MainWindow : Window
     private readonly bool isolatedSettings;
     private ConnectionSettings settings;
     private bool busy;
+    // The map refreshes players every 5 s with the light "monitor" read; the
+    // full check (service, game probe, metrics) keeps its 20 s rhythm.
+    private readonly DispatcherTimer liveTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private bool liveUnsupported, lastResponds, wasMinimized;
     private bool closed, lastCheckFailed;
     private bool suppressNavigationLoad;
     private readonly SemaphoreSlim operationGate = new(1, 1);
@@ -55,6 +59,8 @@ public partial class MainWindow : Window
         settings = injectedSettings ?? (demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load());
         pages = new() { ["Overview"] = OverviewPage, ["Sessions"] = SessionsPage, ["Logs"] = LogsPage, ["Backups"] = BackupsPage, ["Diagnostics"] = DiagnosticsPage, ["Connection"] = ConnectionPage };
         navigation = new() { ["Overview"] = NavOverview, ["Sessions"] = NavSessions, ["Logs"] = NavLogs, ["Backups"] = NavBackups, ["Diagnostics"] = NavDiagnostics, ["Connection"] = NavConnection };
+        MapPage.AllowGameMap = !demo || DemoTransport.HasAtlasOverride;
+        MapPage.Notice += (message, error) => Toast(message, error ? ToastKind.Error : ToastKind.Success);
         pages["Map"] = MapPage; pages["Commands"] = CommandsPage; navigation["Map"] = NavMap; navigation["Commands"] = NavCommands;
         InitializeAdministration();
         ReloadConnections();
@@ -69,7 +75,14 @@ public partial class MainWindow : Window
         PortBox.TextChanged += (_, _) => RefreshTrustChip();
         UpdateServiceButtons(null);
         LogSearch.TextChanged += (_, _) => LogSearchHint.Visibility = LogSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        StateChanged += (_, _) => { Root.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0); MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922"; };
+        StateChanged += async (_, _) =>
+        {
+            Root.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0); MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+            // Nothing is polled while the window is minimized; catch up on return.
+            if (WindowState == WindowState.Minimized) { wasMinimized = true; return; }
+            if (wasMinimized && !busy && dialog is null && !string.IsNullOrEmpty(settings.Host) && currentPage is "Overview" or "Sessions" or "Map") { wasMinimized = false; await RefreshAsync(); }
+            wasMinimized = false;
+        };
         Loaded += async (_, _) =>
         {
             suppressNavigationLoad = true;
@@ -79,13 +92,14 @@ public partial class MainWindow : Window
             if (demo) Toast("Mode démonstration : informations fictives, aucune connexion au VPS.", ToastKind.Info);
             if (demo) await SeedDemoHistoryAsync();
             if (!string.IsNullOrEmpty(settings.Host)) await RefreshAsync();
-            timer.Start();
+            timer.Start(); liveTimer.Start();
             RestartRefreshRing();
         };
+        liveTimer.Tick += async (_, _) => { if (currentPage == "Map" && !busy && dialog is null && WindowState != WindowState.Minimized && !liveUnsupported && !string.IsNullOrEmpty(settings.Host)) await RefreshLiveAsync(); };
         timer.Tick += async (_, _) =>
         {
             RestartRefreshRing();
-            if (!busy && dialog is null && !string.IsNullOrEmpty(settings.Host))
+            if (!busy && dialog is null && WindowState != WindowState.Minimized && !string.IsNullOrEmpty(settings.Host))
             {
                 if (currentPage == "Diagnostics") await LoadDiagnosticsAsync();
                 else if (currentPage == "Commands") await LoadAdministrationAsync();
@@ -95,7 +109,27 @@ public partial class MainWindow : Window
         var clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clock.Tick += (_, _) => { UpdateCheckAge(); MapPage.Tick(); };
         clock.Start();
-        Closed += (_, _) => { closed = true; timer.Stop(); clock.Stop(); dialog?.TrySetResult(false); dialog = null; };
+        Closed += (_, _) => { closed = true; timer.Stop(); liveTimer.Stop(); clock.Stop(); dialog?.TrySetResult(false); dialog = null; (transport as IDisposable)?.Dispose(); };
+    }
+
+    // Silent player refresh for the map; errors surface through the next full check.
+    private async Task RefreshLiveAsync()
+    {
+        try
+        {
+            var data = await transport.SendAsync(ActiveSettings, "monitor");
+            if (busy || currentPage != "Map") return;
+            var monitor = Get(data, "monitor");
+            bool active = Text(Get(Get(data, "service"), "active")) == "active";
+            long pid = Number(Get(monitor, "pid"));
+            bool fresh = PanelData.HasActivity(monitor, active, lastResponds, DateTimeOffset.UtcNow) && (excludedGamePid is null || pid > 0 && pid != excludedGamePid);
+            MapPage.Apply(monitor, fresh);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Unknown action", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("inconnue", StringComparison.OrdinalIgnoreCase))
+        {
+            liveUnsupported = true; // Older Linux tool: the 20 s check still updates the map.
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or System.IO.IOException) { }
     }
 
     // The demonstration starts with a few minutes of history, like a panel left open.
@@ -412,6 +446,7 @@ public partial class MainWindow : Window
         bool active = serviceState == "active";
         bool transition = serviceState is "activating" or "deactivating" or "reloading";
         bool responds = Get(protocol, "ok").ValueKind == JsonValueKind.True;
+        lastResponds = responds;
         bool maintenance = Get(protocol, "maintenance").ValueKind == JsonValueKind.True || Get(monitor, "maintenance").ValueKind == JsonValueKind.True;
         if (active && responds && maintenance) SetState(StateTone.Degraded, "Maintenance", "Les nouvelles connexions sont refusées ; les joueurs présents peuvent terminer leur partie.");
         else if (active && responds) SetState(StateTone.Online, "En ligne", "Le jeu répond sur le VPS. L’annuaire et le tunnel indiquent l’état déclaré de l’accès Internet.");
@@ -512,13 +547,13 @@ public partial class MainWindow : Window
 
     private void ShowPeople(List<PlayerItem> players, List<RoomItem> rooms, string? unavailable)
     {
-        OnlinePlayers.ItemsSource = players.Take(6).ToList();
+        Motion.Sync(OnlinePlayers, players.Take(6).ToList());
         OnlineEmpty.Visibility = players.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         OnlineEmptyText.Text = unavailable ?? "Personne pour l’instant";
-        PlayerList.ItemsSource = players;
+        Motion.Sync(PlayerList, players);
         PlayersEmpty.Visibility = players.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PlayersEmptyText.Text = unavailable ?? "Aucun joueur connecté";
-        RoomCards.ItemsSource = rooms;
+        Motion.Sync(RoomCards, rooms);
         RoomsEmpty.Visibility = rooms.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RoomsEmptyText.Text = unavailable ?? "Aucun salon ouvert";
     }

@@ -36,6 +36,9 @@ public sealed partial class DemoTransport : IPanelTransport
             switch (action)
             {
                 case "status": data = Status(); break;
+                case "monitor":
+                    var live = JsonSerializer.SerializeToElement(Status());
+                    data = new { service = live.GetProperty("service"), monitor = live.GetProperty("monitor") }; break;
                 case "close-room":
                     string roomToClose = LegacyRoomId(name!);
                     int removed = CloseDemoRoom(roomToClose);
@@ -84,7 +87,7 @@ public sealed partial class DemoTransport : IPanelTransport
             {
                 version = 1, pid = running ? gamePid : 0, processCurrent = running, startedAt = startedAt.ToString("O"), updatedAt = now, status = running ? "running" : "stopped", uptimeSeconds = running ? Math.Max(0, (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds) : 0,
                 memory = new { rssBytes = running ? 96_000_000L + random.Next(0, 9_000_000) : 0, heapUsedBytes = running ? 41_000_000L : 0 },
-                players, rooms, connections = players.Length, mapAtlas = DemoAtlas, eclatsConfig = ConfigStatus(),
+                players, rooms, connections = players.Length, mapAtlas = AtlasOverride is { } atlas ? (object)atlas : DemoAtlas, eclatsConfig = ConfigStatus(),
                 counters = new { connections = totalConnections, disconnections = totalDisconnections, roomsCreated = 9, roomJoins = 15, roomLeaves = totalRoomLeaves, errors = 1 },
                 lastError = new { at = DateTimeOffset.UtcNow.AddHours(-3).ToString("O"), code = "ROOM_FULL" }
             },

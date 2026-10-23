@@ -17,6 +17,7 @@ internal static partial class SelfTests
         BoundedReads();
         DemoTransitions();
         DemoAdministration();
+        TownMapReader();
         RunAdditional();
     }
     static partial void RunAdditional();
@@ -136,6 +137,29 @@ internal static partial class SelfTests
         Reject(() => Send("invented-action"), "Demo invented success for an unknown action");
     }
 
+    private static void TownMapReader()
+    {
+        // Literals then a back-reference: "abc" + copy(length 3, distance 3).
+        byte[] packed = [0x10, 6, 0, 0, 0x10, (byte)'a', (byte)'b', (byte)'c', 0x00, 0x02];
+        Assert(System.Text.Encoding.ASCII.GetString(TownMap.Lz77(packed, 0, 64)) == "abcabc", "GBA LZ77 must expand literals and back-references");
+        foreach (var bad in new byte[][] { [0x11, 6, 0, 0], [0x10, 6, 0, 0, 0x80, 0x00, 0x00], [0x10, 6, 0, 0, 0x00, (byte)'a'], [0x10, 0, 1, 0] })
+        {
+            bool refused = false;
+            try { TownMap.Lz77(bad, 0, 64); } catch (InvalidOperationException) { refused = true; }
+            Assert(refused, "GBA LZ77 must refuse a wrong header, a reference before the start, truncated data and an oversized result");
+        }
+        string notRom = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllBytes(notRom, new byte[1024]);
+            bool refused = false;
+            try { TownMap.ImportFromRom(notRom); } catch (InvalidOperationException) { refused = true; }
+            Assert(refused, "Only an original Fire Red ROM may provide the Town Map");
+        }
+        finally { File.Delete(notRom); }
+        Assert(TownMap.GridX == 1 && TownMap.GridY == 2 && TownMap.Cells == 24 && TownMap.Rows == 18, "The server grid must start at the game cursor's first cell");
+    }
+
     private static void DemoAdministration()
     {
         var transport = new DemoTransport(); var settings = new ConnectionSettings();
@@ -150,7 +174,8 @@ internal static partial class SelfTests
         Assert(groups.Any(group => group.Count() == 5) && groups.Any(group => group.Count() == 12), "Demo must exercise the five-player fan and the twelve-player list");
         Assert(groups.Single(group => group.Count() == 12).Select(player => player.GetProperty("roomId").GetString()).Distinct().Count() == 2, "A map group must aggregate players from different rooms");
         Assert(players.All(player => player.GetProperty("accountFingerprint").GetString()!.Length == 8), "The monitor must expose only eight fingerprint characters");
-        Assert(monitor.GetProperty("mapAtlas").GetProperty("sections").GetArrayLength() == 4, "Demo atlas must contain synthetic geometry");
+        var demoSections = monitor.GetProperty("mapAtlas").GetProperty("sections").EnumerateArray().Select(section => section.GetProperty("id").GetString()!).ToArray();
+        Assert(demoSections.Length >= 20 && demoSections.All(id => id.StartsWith("demo-", StringComparison.Ordinal)), "Demo atlas must contain a full synthetic region");
         var overview = Send("admin.overview");
         Assert(overview.GetProperty("connectedPlayers").GetArrayLength() == 20 && overview.GetProperty("bans").GetArrayLength() == 1, "Demo administration must include connected players and one existing ban");
         string hash = overview.GetProperty("accounts")[0].GetProperty("accountHash").GetString()!;

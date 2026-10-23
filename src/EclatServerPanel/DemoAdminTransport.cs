@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -17,9 +18,57 @@ public sealed partial class DemoTransport
             new { id = "demo-a", name = "Cité des longs noms accentués", x = 4, y = 10, width = 1, height = 1, kind = "city" },
             new { id = "demo-b", name = "Les Jardins de l’aurore boréale", x = 15, y = 5, width = 1, height = 1, kind = "city" },
             new { id = "demo-c", name = "Le Belvédère des brumes légères", x = 9, y = 12, width = 2, height = 1, kind = "area" },
-            new { id = "demo-d", name = "Chemin de démonstration", x = 5, y = 10, width = 10, height = 1, kind = "route" }
+            new { id = "demo-d", name = "Chemin de démonstration", x = 5, y = 10, width = 10, height = 1, kind = "route" },
+            new { id = "demo-town-1", name = "Bourg-Lumière", x = 4, y = 13, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-2", name = "Port-Corail", x = 15, y = 10, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-3", name = "Hautevigne", x = 9, y = 3, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-4", name = "Val-Givre", x = 19, y = 2, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-5", name = "Roche-Plume", x = 2, y = 5, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-6", name = "Brisemer", x = 11, y = 8, width = 1, height = 1, kind = "city" },
+            new { id = "demo-town-7", name = "Mont-Ardent", x = 19, y = 10, width = 1, height = 1, kind = "city" },
+            new { id = "demo-route-1", name = "Sentier des Lucioles", x = 4, y = 11, width = 1, height = 2, kind = "route" },
+            new { id = "demo-route-2", name = "Route des Falaises", x = 2, y = 6, width = 1, height = 4, kind = "route" },
+            new { id = "demo-route-3", name = "Passage du Gué", x = 3, y = 10, width = 1, height = 1, kind = "route" },
+            new { id = "demo-route-4", name = "Route des Pins", x = 3, y = 5, width = 6, height = 1, kind = "route" },
+            new { id = "demo-route-5", name = "Montée des Vignes", x = 9, y = 4, width = 1, height = 1, kind = "route" },
+            new { id = "demo-route-6", name = "Route des Crêtes", x = 10, y = 3, width = 5, height = 1, kind = "route" },
+            new { id = "demo-route-7", name = "Descente du Col", x = 15, y = 3, width = 1, height = 2, kind = "route" },
+            new { id = "demo-route-8", name = "Allée des Saules", x = 16, y = 5, width = 3, height = 1, kind = "route" },
+            new { id = "demo-route-9", name = "Route du Nord", x = 19, y = 3, width = 1, height = 7, kind = "route" },
+            new { id = "demo-route-10", name = "Route des Moulins", x = 15, y = 6, width = 1, height = 4, kind = "route" },
+            new { id = "demo-route-11", name = "Quai des Brumes", x = 16, y = 10, width = 3, height = 1, kind = "route" },
+            new { id = "demo-route-12", name = "Route du Phare", x = 12, y = 8, width = 3, height = 1, kind = "route" },
+            new { id = "demo-route-13", name = "Escalier marin", x = 11, y = 9, width = 1, height = 1, kind = "route" },
+            new { id = "demo-route-14", name = "Chenal des Mouettes", x = 5, y = 13, width = 7, height = 1, kind = "route" },
+            new { id = "demo-route-15", name = "Chenal du Récif", x = 12, y = 11, width = 1, height = 3, kind = "route" },
+            new { id = "demo-area-1", name = "Forêt des Murmures", x = 2, y = 7, width = 1, height = 1, kind = "area" },
+            new { id = "demo-area-2", name = "Grotte Opaline", x = 6, y = 5, width = 1, height = 1, kind = "area" },
+            new { id = "demo-area-3", name = "Lac Miroir", x = 17, y = 7, width = 1, height = 1, kind = "area" },
+            new { id = "demo-area-4", name = "Île aux Échos", x = 17, y = 13, width = 1, height = 1, kind = "area" },
+            new { id = "demo-area-5", name = "Tour des Vents", x = 20, y = 2, width = 1, height = 1, kind = "area" }
         }
     };
+    // Developer aid: ECLAT_PANEL_DEMO_ATLAS may name a local copy of a server's
+    // atlas to check the demo players against it. Nothing of it is published.
+    private static readonly JsonElement? AtlasOverride = LoadAtlasOverride();
+    internal static bool HasAtlasOverride => AtlasOverride is not null;
+    private static JsonElement? LoadAtlasOverride()
+    {
+        string? path = Environment.GetEnvironmentVariable("ECLAT_PANEL_DEMO_ATLAS");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+        try { using var document = JsonDocument.Parse(File.ReadAllText(path)); return document.RootElement.Clone(); }
+        catch (Exception ex) when (ex is IOException or JsonException) { return null; }
+    }
+    private static (string Id, string Name) DemoPlace(string section)
+    {
+        string name = section == "demo-a" ? "Cité des longs noms accentués" : section == "demo-b" ? "Les Jardins de l’aurore boréale" : "Le Belvédère des brumes légères";
+        if (AtlasOverride is not { } atlas) return (section, name);
+        var sections = atlas.GetProperty("sections").EnumerateArray().ToList();
+        var cities = sections.Where(item => item.GetProperty("kind").GetString() == "city").ToList();
+        var areas = sections.Where(item => item.GetProperty("kind").GetString() == "area").ToList();
+        var pick = section == "demo-a" ? cities[0] : section == "demo-b" ? cities[Math.Min(6, cities.Count - 1)] : areas.Count > 1 ? areas[1] : cities[^1];
+        return (pick.GetProperty("id").GetString()!, pick.GetProperty("name").GetString()!);
+    }
     private readonly List<DemoPlayer> demoPlayers = [];
     private readonly List<DemoRoom> demoRooms = [];
     private readonly Dictionary<string, DemoAccount> demoAccounts = new(StringComparer.Ordinal);
@@ -105,8 +154,8 @@ public sealed partial class DemoTransport
         {
             mapGroup = player.Section == "demo-a" ? 4 : player.Section == "demo-b" ? 6 : 8,
             mapNum = 1, x = 5 + player.Index % 7, y = 3 + player.Index % 5, direction = player.Index % 4 + 1,
-            name = player.Section == "demo-a" ? "Cité des longs noms accentués" : player.Section == "demo-b" ? "Les Jardins de l’aurore boréale" : "Le Belvédère des brumes légères",
-            section = player.Section
+            name = DemoPlace(player.Section).Name,
+            section = DemoPlace(player.Section).Id
         };
         return new { id = player.Id, name = player.Name, roomId = player.RoomId, place,
             stateAgeMs = player.Section is null ? (int?)null : player.Index is 16 or 18 ? 18000 + player.Index * 100 : 250 + player.Index * 70,

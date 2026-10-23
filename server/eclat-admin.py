@@ -28,9 +28,12 @@ MAX_DOWNLOAD = 64 * 1024 * 1024
 MAX_CONFIG = 64 * 1024
 MAX_ADMIN_RESPONSE = 1024 * 1024
 ADMIN_DEADLINE = 35
-ACTIONS = {'close-room', 'status', 'logs', 'start', 'stop', 'restart', 'backup', 'backups', 'download', 'restore', 'diagnostics',
+ACTIONS = {'close-room', 'status', 'monitor', 'logs', 'start', 'stop', 'restart', 'backup', 'backups', 'download', 'restore', 'diagnostics',
            'admin.overview', 'admin.audit', 'admin.command', 'config.get', 'config.save', 'config.history', 'config.restore', 'statistics'}
 MUTATIONS = {'start', 'stop', 'restart', 'backup', 'restore', 'close-room', 'admin.command', 'config.save', 'config.restore'}
+SESSION_IDLE_SECONDS = 600
+SESSION_MAX_SECONDS = 4 * 3600
+NODE_VERSION_CACHE = Path('/run/eclat-panel-node-version.json')
 LEGACY_NO_NAME = {'status', 'logs', 'start', 'stop', 'restart', 'backup', 'backups', 'diagnostics'}
 ADMIN_COMMANDS = {'player.kick', 'account.ban', 'account.unban', 'room.close', 'room.update', 'maintenance.set', 'eclats.adjust', 'casino.refund'}
 SNAPSHOT_NAME = re.compile(r'^eclat-\d{8}T\d{6}Z-[a-f0-9]{8}\.tar\.gz$')
@@ -188,7 +191,33 @@ class Admin:
         except (OSError, ValueError):
             pass
         service = self.service_state()
-        return {'service': service, 'protocol': self.protocol(), 'monitor': self.monitor(service), 'network': network, 'metrics': self.metrics(), 'host': {'name': socket.gethostname(), 'uptimeSeconds': int(uptime), 'nodeVersion': self.command('/usr/local/bin/node', '--version', check=False)}}
+        return {'service': service, 'protocol': self.protocol(), 'monitor': self.monitor(service), 'network': network, 'metrics': self.metrics(), 'host': {'name': socket.gethostname(), 'uptimeSeconds': int(uptime), 'nodeVersion': self.node_version()}}
+
+    def live(self):
+        """Players and rooms only, for the panel's frequent map refresh: no game probe."""
+        service = self.service_state()
+        return {'service': service, 'monitor': self.monitor(service)}
+
+    def node_version(self, binary=Path('/usr/local/bin/node')):
+        # Starting Node on every status costs more than the rest of the check;
+        # the version only changes when the binary does.
+        try:
+            stamp = binary.stat().st_mtime_ns
+        except OSError:
+            return ''
+        try:
+            cached = json.loads(NODE_VERSION_CACHE.read_text(encoding='utf-8'))
+            if cached.get('mtime') == stamp and isinstance(cached.get('version'), str):
+                return cached['version']
+        except (OSError, ValueError, AttributeError):
+            pass
+        version = self.command(str(binary), '--version', check=False)
+        try:
+            NODE_VERSION_CACHE.write_text(json.dumps({'mtime': stamp, 'version': version}), encoding='utf-8')
+            os.chmod(NODE_VERSION_CACHE, 0o600)
+        except OSError:
+            pass
+        return version
 
     def logs(self):
         text = self.command('/usr/bin/journalctl', '-u', self.service, '--no-pager', '-o', 'short-iso', '-n', '200', '--since', '2 hours ago')
@@ -257,7 +286,7 @@ class Admin:
                     if source.is_file():
                         archive.add(source, arcname='config/' + entry, recursive=False)
                         included.append(entry)
-                manifest = json.dumps({'format': 1, 'createdUtc': timestamp, 'database': 'coop.sqlite', 'tables': tables, 'configFiles': included, 'databaseSha256': hashlib.sha256(db_copy.read_bytes()).hexdigest()}).encode()
+                manifest = json.dumps({'format': 1, 'createdUtc': timestamp, 'database': 'coop.sqlite', 'tables': tables, 'configFiles': included, 'databaseSha256': file_sha256(db_copy)}).encode()
                 info = tarfile.TarInfo('manifest.json')
                 info.size = len(manifest)
                 info.mode = 0o600
@@ -265,7 +294,7 @@ class Admin:
             os.chmod(temporary, 0o600)
             os.replace(temporary, destination)
         result = self.backup_info(destination)
-        result.update({'sha256': hashlib.sha256(destination.read_bytes()).hexdigest(), 'integrity': 'ok'})
+        result.update({'sha256': file_sha256(destination), 'integrity': 'ok'})
         return result
 
     @staticmethod
@@ -892,6 +921,8 @@ class Admin:
                 raise ValueError('Unknown administration command')
             arguments = self.checked_admin_arguments(command, request.get('arguments'))
             return self.admin_exchange(command, arguments, self.checked_uuid(request.get('requestId')))
+        if action == 'monitor':
+            return self.live()
         if action == 'admin.overview':
             return self.admin_overview()
         if action == 'admin.audit':
@@ -927,6 +958,69 @@ class Admin:
             state_path.unlink(missing_ok=True)
 
 
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def read_first_line(descriptor):
+    data = b''
+    while b'\n' not in data:
+        chunk = os.read(descriptor, 65536)
+        if not chunk:
+            break
+        data += chunk
+        if len(data) > MAX_REQUEST + 1:
+            break
+    raw, _, rest = data.partition(b'\n')
+    if len(raw) > MAX_REQUEST:
+        raise ValueError('Request too large')
+    return raw, rest
+
+
+def respond(result=None, error=None):
+    envelope = {'ok': True, 'data': result} if error is None else {'ok': False, 'error': redact(str(error))}
+    sys.stdout.write(json.dumps(envelope, ensure_ascii=False) + '\n')
+    sys.stdout.flush()
+
+
+def serve_session(admin, pending=b''):
+    """One SSH connection, many requests: one JSON line in, one JSON line out.
+
+    The panel keeps this open instead of paying a full SSH handshake per
+    refresh. Each request is validated and locked exactly like a single call.
+    """
+    import select
+    respond({'session': 1, 'idleSeconds': SESSION_IDLE_SECONDS})
+    started = time.monotonic()
+    descriptor = sys.stdin.fileno()
+    while time.monotonic() - started < SESSION_MAX_SECONDS:
+        # Read the descriptor directly: a buffered reader could hold a whole
+        # request that select() would then never report.
+        while b'\n' not in pending and len(pending) <= MAX_REQUEST:
+            ready, _, _ = select.select([descriptor], [], [], SESSION_IDLE_SECONDS)
+            if not ready:
+                return
+            chunk = os.read(descriptor, 65536)
+            if not chunk:
+                return
+            pending += chunk
+        raw, _, pending = pending.partition(b'\n')
+        if len(raw) > MAX_REQUEST:
+            respond(error='Request too large')
+            return
+        try:
+            request = json.loads(raw)
+            if isinstance(request, dict) and request.get('action') == 'session':
+                raise ValueError('Session already open')
+            respond(admin.dispatch(request))
+        except Exception as exc:
+            respond(error=exc)
+
+
 def main():
     os.umask(0o077)
     try:
@@ -946,10 +1040,12 @@ def main():
             return
         if len(sys.argv) != 1:
             raise ValueError('Arguments are not accepted')
-        raw = sys.stdin.buffer.read(MAX_REQUEST + 1)
-        if len(raw) > MAX_REQUEST:
-            raise ValueError('Request too large')
+        # One line per request, so that a session client can keep stdin open.
+        raw, rest = read_first_line(sys.stdin.fileno())
         request = json.loads(raw)
+        if request == {'action': 'session'}:
+            serve_session(admin, rest)
+            return
         result = admin.dispatch(request)
         print(json.dumps({'ok': True, 'data': result}, ensure_ascii=False))
     except Exception as exc:

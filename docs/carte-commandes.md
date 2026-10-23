@@ -6,9 +6,15 @@ La validation décrite ici a été faite sur le PC et dans des serveurs locaux t
 
 ## Lire la carte
 
-La page Carte associe un dessin schématique des zones à la liste des joueurs. Les noms de lieux, les cartes et les coordonnées des zones viennent du serveur. Le panel dessine des formes simples ; il ne contient aucune image extraite du jeu. Un bâtiment est rattaché à la section de sa ville lorsque les données du serveur l’indiquent.
+La page Carte associe la région à la liste des joueurs. Les noms de lieux, les cartes et les coordonnées des zones viennent du serveur. Sans autre réglage, le panel dessine la région lui-même : terres, routes, villes et lieux. Un bâtiment est rattaché à la section de sa ville lorsque les données du serveur l’indiquent.
 
-Un point représente une section. Lorsque plusieurs joueurs y sont présents, le point affiche leur nombre. Un groupe de deux à huit joueurs s’ouvre en éventail au survol ou au clic ; un groupe plus grand ouvre une bulle contenant sa liste. Cliquer un joueur le sélectionne aussi dans la liste principale. Cliquer à côté referme le groupe.
+Une pastille représente un joueur, à la couleur de son salon ; elle pulse tant que sa position est récente. Lorsque plusieurs joueurs sont dans la même section, une pastille affiche leur nombre, entourée d’un anneau partagé entre leurs salons. Un groupe de deux à huit joueurs s’ouvre en éventail au survol ou au clic ; un groupe plus grand s’affiche dans le panneau de droite. Cliquer un joueur le sélectionne aussi dans la liste principale et affiche son détail à droite. Cliquer à côté referme le groupe.
+
+### Carte du jeu
+
+Le bouton **Afficher la carte du jeu…** lit la Carte de la Ville de Kanto dans votre ROM Rouge Feu d’origine, française ou anglaise, celle qu’accepte le lanceur du jeu. Le panel vérifie l’empreinte de la ROM puis celle de chaque élément lu (dessins, plan et couleurs). Il enregistre seulement l’image de la carte, 192 × 144 pixels, dans `%LOCALAPPDATA%\EclatServerPanel\town-map.png`. La ROM n’est ni copiée ni conservée, et aucune image du jeu n’est publiée dans ce dépôt. Les pastilles se placent sur la grille de la carte du jeu, celle de son curseur. Le sélecteur **Carte du jeu / Schéma** passe de l’une à l’autre ; supprimer le fichier retire la carte. La même lecture est possible sans fenêtre : `EclatServerPanel.exe --import-town-map chemin\vers\la-rom.gba`.
+
+La démonstration garde le schéma, car sa région fictive ne correspond pas à la carte du jeu. Pour vérifier l’alignement en développement, la variable `ECLAT_PANEL_DEMO_ATLAS` peut désigner une copie locale de l’atlas d’un serveur ; les joueurs fictifs sont alors placés sur ses lieux. Les captures ainsi produites restent locales.
 
 ![Carte et tableau des joueurs de démonstration](captures/map-table.png)
 
