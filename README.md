@@ -45,7 +45,7 @@ L’interface sombre présente l’état du jeu, ses ressources, ses joueurs et 
 | Sauvegarder | Créer un instantané SQLite cohérent et en télécharger une copie vérifiée par SHA-256. |
 | Restaurer | Choisir une sauvegarde, confirmer la restauration et conserver une copie de la base précédente. |
 
-La version 1.2.0 comprend aussi :
+Depuis la version 1.2.0, le panel comprend aussi :
 
 - une carte schématique avec regroupement des joueurs, positions anciennes estompées et liste en tableau, fiches ou par lieu ;
 - l’expulsion, le bannissement et sa levée, la fermeture ou la modification d’un salon et le mode maintenance ;
@@ -73,7 +73,7 @@ Le panel est conçu pour un serveur Éclat compatible avec l’outil Linux de ce
 
 ## Télécharger
 
-Prendre l’archive Windows 1.2.0 dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l’archive. Le [guide de déploiement](docs/deploiement.md) décrit les éléments à installer séparément sur un serveur compatible.
+Prendre l’archive Windows 1.3.0 dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l’archive. Le [guide de déploiement](docs/deploiement.md) décrit les éléments à installer séparément sur un serveur compatible, dont l’outil Linux 1.3.0 qui permet la connexion SSH unique.
 
 ## Première connexion
 
