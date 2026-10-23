@@ -2,35 +2,237 @@
   <UserControl.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="AdminStyles.xaml"/></ResourceDictionary.MergedDictionaries>
-      <DataTemplate x:Key="MapPlayerCard"><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Room}" Style="{StaticResource Hint}"/><TextBlock Text="{Binding Location}" Margin="0,5,0,0"/><TextBlock Style="{StaticResource Hint}"><Run Text="Carte "/><Run Text="{Binding Map, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Coordinates, Mode=OneWay}"/></TextBlock><TextBlock Style="{StaticResource Hint}"><Run Text="Badges "/><Run Text="{Binding BadgesText, Mode=OneWay}"/><Run Text=" · Pokédex "/><Run Text="{Binding DexText, Mode=OneWay}"/></TextBlock><TextBlock Style="{StaticResource Hint}"><Run Text="Connecté depuis "/><Run Text="{Binding Connected, Mode=OneWay}"/><Run Text=" · position "/><Run Text="{Binding Age, Mode=OneWay}"/></TextBlock></StackPanel></DataTemplate>
+      <!-- Round avatar in the player's room colour, shared by every list. -->
+      <DataTemplate x:Key="Avatar">
+        <Grid Width="30" Height="30">
+          <Ellipse Fill="{Binding RoomBrush}"/>
+          <TextBlock Text="{Binding Initial}" Foreground="#0A0F1F" FontWeight="Bold" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+      </DataTemplate>
+      <DataTemplate x:Key="Pips">
+        <ItemsControl ItemsSource="{Binding BadgePips}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate><DataTemplate>
+            <Border x:Name="Pip" Width="7" Height="7" CornerRadius="2" Margin="0,0,3,0" Background="{StaticResource Line}"/>
+            <DataTemplate.Triggers><DataTrigger Binding="{Binding}" Value="True"><Setter TargetName="Pip" Property="Background" Value="#FFC857"/></DataTrigger></DataTemplate.Triggers>
+          </DataTemplate></ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </DataTemplate>
+      <DataTemplate x:Key="Freshness">
+        <StackPanel Orientation="Horizontal">
+          <Ellipse x:Name="Dot" Width="7" Height="7" Fill="{StaticResource Success}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding Age}" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+        </StackPanel>
+        <DataTemplate.Triggers><DataTrigger Binding="{Binding IsStale}" Value="True"><Setter TargetName="Dot" Property="Fill" Value="{StaticResource Faint}"/></DataTrigger></DataTemplate.Triggers>
+      </DataTemplate>
+      <DataTemplate x:Key="MapPlayerCard">
+        <Grid Margin="4">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <ContentPresenter ContentTemplate="{StaticResource Avatar}" Content="{Binding}" VerticalAlignment="Top" Margin="0,2,12,0"/>
+          <StackPanel Grid.Column="1">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Room}" Foreground="{Binding RoomBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,1,0,8"/>
+            <TextBlock Text="{Binding Location}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,1,0,8"><Run Text="Carte "/><Run Text="{Binding Map, Mode=OneWay}"/><Run Text=" · case "/><Run Text="{Binding Coordinates, Mode=OneWay}"/></TextBlock>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <ContentPresenter ContentTemplate="{StaticResource Pips}" Content="{Binding}" VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="1" Style="{StaticResource Hint}"><Run Text="Pokédex "/><Run Text="{Binding DexText, Mode=OneWay}"/></TextBlock>
+            </Grid>
+            <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <ContentPresenter ContentTemplate="{StaticResource Freshness}" Content="{Binding}"/>
+              <TextBlock Grid.Column="1" Style="{StaticResource Hint}"><Run Text="depuis "/><Run Text="{Binding Connected, Mode=OneWay}"/></TextBlock>
+            </Grid>
+          </StackPanel>
+        </Grid>
+      </DataTemplate>
+      <Style x:Key="SearchBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Padding" Value="34,0,10,0"/><Setter Property="MinHeight" Value="38"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
     </ResourceDictionary>
   </UserControl.Resources>
   <Grid>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="260" MinHeight="220"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="120"/></Grid.RowDefinitions>
-    <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <StackPanel Margin="0,0,10,0"><TextBlock Text="RECHERCHER UN JOUEUR" Style="{StaticResource Overline}"/><TextBox x:Name="SearchBox" TextChanged="Filters_Changed" ToolTip="Recherche par nom, avec ou sans accents"/></StackPanel>
-      <StackPanel Grid.Column="1" Margin="0,0,10,0"><TextBlock Text="SALON" Style="{StaticResource Overline}"/><ComboBox x:Name="RoomFilter" DisplayMemberPath="Label" SelectedValuePath="Id" SelectionChanged="Filters_Changed"/></StackPanel>
-      <StackPanel Grid.Column="2"><TextBlock Text="LIEU" Style="{StaticResource Overline}"/><ComboBox x:Name="PlaceFilter" DisplayMemberPath="Label" SelectedValuePath="Id" SelectionChanged="Filters_Changed"/></StackPanel>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="2.6*" MinHeight="330"/><RowDefinition Height="Auto"/><RowDefinition Height="1.4*" MinHeight="150"/></Grid.RowDefinitions>
+
+    <!-- Filters -->
+    <Grid Margin="0,0,0,12">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid Margin="0,0,10,0">
+        <TextBox x:Name="SearchBox" Style="{StaticResource SearchBox}" TextChanged="Filters_Changed" ToolTip="Recherche par nom, avec ou sans accents"/>
+        <TextBlock Text="&#xE721;" FontFamily="{StaticResource Icons}" Foreground="{StaticResource Muted}" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+        <TextBlock x:Name="SearchHint" Text="Rechercher un joueur" Foreground="{StaticResource Faint}" Margin="35,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+      </Grid>
+      <ComboBox x:Name="RoomFilter" Grid.Column="1" Margin="0,0,10,0" DisplayMemberPath="Label" SelectedValuePath="Id" SelectionChanged="Filters_Changed" ToolTip="Filtrer par salon"/>
+      <ComboBox x:Name="PlaceFilter" Grid.Column="2" DisplayMemberPath="Label" SelectedValuePath="Id" SelectionChanged="Filters_Changed" ToolTip="Filtrer par lieu"/>
     </Grid>
-    <local:PlayerMapCanvas x:Name="MapCanvas" Grid.Row="1"/>
-    <Border x:Name="CrowdPanel" Grid.Row="1" Visibility="Collapsed" Background="{StaticResource CardHigh}" BorderBrush="{StaticResource Cyan}" BorderThickness="1" CornerRadius="12" Padding="12" Width="340" HorizontalAlignment="Right" Margin="10">
-      <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions><TextBlock x:Name="CrowdTitle" FontWeight="SemiBold" Margin="0,0,0,8"/><ListBox x:Name="CrowdRows" Grid.Row="1" SelectionChanged="Player_Selected"><ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}"/><TextBlock Text="{Binding Room}" Style="{StaticResource Hint}"/></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox></Grid>
-    </Border>
-    <Grid Grid.Row="2" Margin="0,10,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="MapSummary" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0"/><StackPanel Grid.Column="1" Orientation="Horizontal"><RadioButton x:Name="TableMode" Content="Tableau" Style="{StaticResource Segment}" GroupName="MapMode" Tag="table" Checked="Mode_Changed"/><RadioButton x:Name="CardsMode" Content="Fiches" Style="{StaticResource Segment}" GroupName="MapMode" Tag="cards" Checked="Mode_Changed"/><RadioButton x:Name="PlacesMode" Content="Par lieu" Style="{StaticResource Segment}" GroupName="MapMode" Tag="places" Checked="Mode_Changed"/></StackPanel></Grid>
+
+    <!-- Map and inspector -->
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="290"/></Grid.ColumnDefinitions>
+      <Border CornerRadius="16" BorderBrush="{StaticResource Line}" BorderThickness="1" ClipToBounds="True">
+        <Grid>
+          <local:PlayerMapCanvas x:Name="MapCanvas"/>
+          <StackPanel Margin="18,14,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+            <TextBlock x:Name="MapTitle" Text="Région" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
+            <TextBlock x:Name="MapHeadline" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource Text}" MaxWidth="200" TextWrapping="Wrap"/>
+          </StackPanel>
+          <ItemsControl x:Name="RoomLegend" Margin="14,0,14,12" MaxWidth="215" VerticalAlignment="Bottom" HorizontalAlignment="Left" IsHitTestVisible="False">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate><DataTemplate>
+              <Border Background="#E6141C3A" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="11" Padding="9,3,10,3" Margin="0,6,6,0">
+                <StackPanel Orientation="Horizontal">
+                  <Ellipse Width="8" Height="8" Fill="{Binding Brush}" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                  <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}" FontSize="11.5" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Text="{Binding Count}" Foreground="{StaticResource Muted}" FontSize="11.5" Margin="6,0,0,0"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="1" Margin="12,0,0,0" Background="{StaticResource Card}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="16" Padding="18">
+        <Grid>
+          <!-- Nothing selected: busiest places -->
+          <StackPanel x:Name="PlacesSummary">
+            <TextBlock Text="LIEUX LES PLUS FRÉQUENTÉS" Style="{StaticResource Overline}"/>
+            <ItemsControl x:Name="BusyPlaces" Margin="0,10,0,0">
+              <ItemsControl.ItemTemplate><DataTemplate>
+                <StackPanel Margin="0,0,0,12">
+                  <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="{StaticResource Cyan}" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                  </Grid>
+                  <Grid Height="5" Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="{Binding Fill}"/><ColumnDefinition Width="{Binding Rest}"/></Grid.ColumnDefinitions>
+                    <Border Grid.ColumnSpan="2" CornerRadius="2.5" Background="{StaticResource Line}"/>
+                    <Border CornerRadius="2.5" Background="{StaticResource Crystal}"/>
+                  </Grid>
+                </StackPanel>
+              </DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="Cliquez sur un joueur ou un groupe pour voir le détail ici." Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
+          <!-- One player -->
+          <StackPanel x:Name="Inspector" Visibility="Collapsed">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <Grid Width="54" Height="54" Margin="0,0,12,0">
+                <Ellipse Fill="{Binding RoomBrush}" Opacity="0.22"/>
+                <Ellipse Fill="{Binding RoomBrush}" Margin="5"/>
+                <TextBlock Text="{Binding Initial}" Foreground="#0A0F1F" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Grid>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Room}" Foreground="{Binding RoomBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+              </StackPanel>
+            </Grid>
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,12"/>
+            <TextBlock Text="LIEU" Style="{StaticResource Overline}"/>
+            <TextBlock Text="{Binding Location}" Foreground="{StaticResource Text}" FontSize="14" TextWrapping="Wrap" Margin="0,4,0,2"/>
+            <TextBlock Style="{StaticResource Hint}"><Run Text="Carte "/><Run Text="{Binding Map, Mode=OneWay}"/><Run Text=" · case "/><Run Text="{Binding Coordinates, Mode=OneWay}"/></TextBlock>
+            <Grid Margin="0,12,0,0">
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <StackPanel Margin="0,0,10,0">
+                <TextBlock Style="{StaticResource Overline}"><Run Text="BADGES "/><Run Text="{Binding BadgesText, Mode=OneWay}"/></TextBlock>
+                <ContentPresenter ContentTemplate="{StaticResource Pips}" Content="{Binding}" Margin="0,7,0,0" HorizontalAlignment="Left"/>
+              </StackPanel>
+              <StackPanel Grid.Column="1">
+                <TextBlock Style="{StaticResource Overline}"><Run Text="POKÉDEX "/><Run Text="{Binding DexText, Mode=OneWay}"/></TextBlock>
+                <ProgressBar Value="{Binding DexRatio, Mode=OneWay}" Maximum="1" Height="5" Margin="0,8,0,0" Foreground="{StaticResource Crystal}" Background="{StaticResource Line}" BorderThickness="0"/>
+              </StackPanel>
+            </Grid>
+            <Border Height="1" Background="{StaticResource Line}" Margin="0,12"/>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+              <StackPanel><TextBlock Text="CONNECTÉ DEPUIS" Style="{StaticResource Overline}"/><TextBlock Text="{Binding Connected}" Foreground="{StaticResource Text}" Margin="0,4,0,0"/></StackPanel>
+              <StackPanel Grid.Column="1"><TextBlock Text="POSITION" Style="{StaticResource Overline}"/><ContentPresenter ContentTemplate="{StaticResource Freshness}" Content="{Binding}" Margin="0,4,0,0"/></StackPanel>
+            </Grid>
+          </StackPanel>
+
+          <!-- Group of more than eight -->
+          <Border x:Name="CrowdPanel" Visibility="Collapsed" Background="{StaticResource Card}">
+            <Grid>
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+              <TextBlock Text="GROUPE" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
+              <TextBlock x:Name="CrowdTitle" Grid.Row="1" Foreground="{StaticResource Text}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,4,0,10"/>
+              <ListBox x:Name="CrowdRows" Grid.Row="2" SelectionChanged="Player_Selected">
+                <ListBox.ItemContainerStyle>
+                  <Style TargetType="ListBoxItem"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Row" CornerRadius="10" Padding="8,6" Margin="0,0,0,4" Background="Transparent">
+                      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <ContentPresenter ContentTemplate="{StaticResource Avatar}" Content="{Binding}" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text}" TextTrimming="CharacterEllipsis"/>
+                          <TextBlock Text="{Binding Room}" Foreground="{StaticResource Muted}" FontSize="11.5" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="{StaticResource CardHigh}"/></Trigger>
+                      <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{StaticResource CrystalSoft}"/></Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate></Setter.Value></Setter></Style>
+                </ListBox.ItemContainerStyle>
+              </ListBox>
+            </Grid>
+          </Border>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- List header -->
+    <Grid Grid.Row="2" Margin="0,16,0,10">
+      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock Text="Joueurs" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
+        <TextBlock x:Name="MapSummary" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,1,12,0"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <RadioButton x:Name="TableMode" Content="Tableau" Style="{StaticResource Segment}" GroupName="MapMode" Tag="table" Checked="Mode_Changed"/>
+        <RadioButton x:Name="CardsMode" Content="Fiches" Style="{StaticResource Segment}" GroupName="MapMode" Tag="cards" Checked="Mode_Changed"/>
+        <RadioButton x:Name="PlacesMode" Content="Par lieu" Style="{StaticResource Segment}" GroupName="MapMode" Tag="places" Checked="Mode_Changed"/>
+      </StackPanel>
+    </Grid>
+
     <Grid Grid.Row="3">
-      <DataGrid x:Name="PlayerTable" SelectionChanged="Player_Selected">
+      <DataGrid x:Name="PlayerTable" SelectionChanged="Player_Selected" RowHeight="48">
         <DataGrid.Columns>
-          <DataGridTemplateColumn Header="Joueur" SortMemberPath="Name" Width="1.4*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Name}" TextWrapping="Wrap"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Salon" SortMemberPath="Room" Width="1.2*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Room}" TextWrapping="Wrap"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Lieu" SortMemberPath="Location" Width="1.8*"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Location}"/><TextBlock Style="{StaticResource Hint}"><Run Text="{Binding Map, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Coordinates, Mode=OneWay}"/></TextBlock></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Badges" SortMemberPath="Badges" Width="0.65*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding BadgesText}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Pokédex" SortMemberPath="Dex" Width="0.7*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding DexText}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Connecté depuis" SortMemberPath="ConnectedAt" Width="0.95*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Connected}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="Position" SortMemberPath="BaseAgeMs" Width="0.8*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Age}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="JOUEUR" SortMemberPath="Name" Width="1.5*"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <DockPanel>
+              <ContentPresenter DockPanel.Dock="Left" ContentTemplate="{StaticResource Avatar}" Content="{Binding}" Margin="0,0,10,0"/>
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="SALON" SortMemberPath="Room" Width="1.2*"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <DockPanel><Ellipse DockPanel.Dock="Left" Width="7" Height="7" Fill="{Binding RoomBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="{Binding Room}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,10,0"/></DockPanel>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="LIEU" SortMemberPath="Location" Width="1.6*"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Location}" TextTrimming="CharacterEllipsis"/><TextBlock Style="{StaticResource Hint}" FontSize="11"><Run Text="{Binding Map, Mode=OneWay}"/><Run Text=" · case "/><Run Text="{Binding Coordinates, Mode=OneWay}"/></TextBlock></StackPanel>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="BADGES" SortMemberPath="Badges" Width="0.9*"><DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter ContentTemplate="{StaticResource Pips}" Content="{Binding}" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="POKÉDEX" SortMemberPath="Dex" Width="0.75*"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,14,0"><TextBlock Text="{Binding DexText}"/><ProgressBar Value="{Binding DexRatio, Mode=OneWay}" Maximum="1" Height="3" Margin="0,4,0,0" Foreground="{StaticResource Crystal}" Background="{StaticResource Line}" BorderThickness="0"/></StackPanel>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="EN LIGNE" SortMemberPath="ConnectedAt" Width="0.9*"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Connected}" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="POSITION" SortMemberPath="BaseAgeMs" Width="0.8*"><DataGridTemplateColumn.CellTemplate><DataTemplate><ContentPresenter ContentTemplate="{StaticResource Freshness}" Content="{Binding}" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
         </DataGrid.Columns>
       </DataGrid>
-      <ListBox x:Name="PlayerCards" Visibility="Collapsed" ItemTemplate="{StaticResource MapPlayerCard}" SelectionChanged="Player_Selected"><ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel><ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="Width" Value="310"/><Setter Property="VerticalContentAlignment" Value="Stretch"/></Style></ListBox.ItemContainerStyle></ListBox>
-      <ListBox x:Name="PlayerPlaces" Visibility="Collapsed" ItemTemplate="{StaticResource MapPlayerCard}" SelectionChanged="Player_Selected"><ListBox.GroupStyle><GroupStyle><GroupStyle.HeaderTemplate><DataTemplate><TextBlock Text="{Binding Name}" Style="{StaticResource CardTitle}" Margin="5,12,5,10"/></DataTemplate></GroupStyle.HeaderTemplate></GroupStyle></ListBox.GroupStyle></ListBox>
+      <ListBox x:Name="PlayerCards" Visibility="Collapsed" ItemTemplate="{StaticResource MapPlayerCard}" SelectionChanged="Player_Selected">
+        <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="Width" Value="300"/><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="VerticalContentAlignment" Value="Stretch"/></Style></ListBox.ItemContainerStyle>
+      </ListBox>
+      <ListBox x:Name="PlayerPlaces" Visibility="Collapsed" ItemTemplate="{StaticResource MapPlayerCard}" SelectionChanged="Player_Selected">
+        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="Width" Value="300"/><Setter Property="Margin" Value="0,0,10,0"/></Style></ListBox.ItemContainerStyle>
+        <ListBox.GroupStyle><GroupStyle>
+          <GroupStyle.Panel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></GroupStyle.Panel>
+          <GroupStyle.HeaderTemplate><DataTemplate>
+            <StackPanel Orientation="Horizontal" Margin="4,10,4,10">
+              <Border Width="4" Height="18" CornerRadius="2" Background="{StaticResource Crystal}" Margin="0,0,10,0"/>
+              <TextBlock Text="{Binding Name}" Style="{StaticResource CardTitle}" VerticalAlignment="Center"/>
+              <Border Background="{StaticResource CrystalSoft}" CornerRadius="9" Padding="8,1" Margin="10,0,0,0" VerticalAlignment="Center"><TextBlock Text="{Binding ItemCount}" Foreground="{StaticResource Cyan}" FontSize="11.5" FontWeight="SemiBold"/></Border>
+            </StackPanel>
+          </DataTemplate></GroupStyle.HeaderTemplate>
+        </GroupStyle></ListBox.GroupStyle>
+      </ListBox>
     </Grid>
   </Grid>
 </UserControl>

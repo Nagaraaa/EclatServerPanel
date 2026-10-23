@@ -49,7 +49,14 @@ internal sealed class MapPlayer : INotifyPropertyChanged
     public string Map { get; private set; } = "—";
     public int? Badges { get; private set; }
     public int? Dex { get; private set; }
-    public string BadgesText => Badges is { } n ? $"{System.Numerics.BitOperations.PopCount((uint)n)} / 8" : "—";
+    public string BadgesText => Badges is { } n ? $"{BadgeCount} / 8" : "—";
+    public int BadgeCount => Badges is { } n ? System.Numerics.BitOperations.PopCount((uint)n) : 0;
+    public bool[] BadgePips => Enumerable.Range(0, 8).Select(index => Badges is { } n && (n & (1 << index)) != 0).ToArray();
+    public double DexRatio => Dex is { } n ? Math.Clamp(n / 386d, 0, 1) : 0;
+    public int RoomTone => MapPalette.Tone(RoomId);
+    public System.Windows.Media.Brush RoomBrush => MapPalette.Brush(RoomTone);
+    public string Initial => Name.Length == 0 ? "?" : Name[..1].ToUpper(CultureInfo.GetCultureInfo("fr-FR"));
+    public string Freshness => AgeMs is not { } age ? "Position inconnue" : age > 10000 ? $"Position ancienne · {Age}" : $"En direct · {Age}";
     public string DexText => Dex?.ToString(CultureInfo.InvariantCulture) ?? "—";
     public DateTimeOffset? ConnectedAt { get; private set; }
     public double? BaseAgeMs { get; private set; }

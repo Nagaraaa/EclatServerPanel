@@ -27,6 +27,7 @@ public partial class AdminPanelView : UserControl
         CommandChoice.ItemsSource = new[] { new AdminChoice("player.kick", "Expulser un joueur"), new("account.ban", "Bannir un compte"), new("account.unban", "Lever un bannissement"), new("room.close", "Fermer un salon"), new("room.update", "Modifier un salon"), new("maintenance.set", "Mode maintenance"), new("eclats.adjust", "Créditer ou débiter des Éclats"), new("casino.refund", "Rendre des jetons de casino") };
         RoomVisibility.ItemsSource = new[] { new AdminChoice("public", "Public"), new("private", "Privé") }; RoomVisibility.SelectedValue = "public";
         EventsGrid.ItemsSource = editor.Events; BannersGrid.ItemsSource = editor.Banners;
+        CommandTiles.ItemsSource = Tiles;
         CommandChoice.SelectedIndex = 0; CommandsTab.IsChecked = true;
         Clear();
     }
@@ -52,7 +53,9 @@ public partial class AdminPanelView : UserControl
         if (!preserveRoomDraft || roomDraftId != RoomChoice.SelectedValue as string) LoadRoomOptions();
         bool maintenance = PanelJson.Get(data, "maintenance").ValueKind == JsonValueKind.True;
         MaintenanceEnabled.IsChecked = maintenance;
-        MaintenanceState.Text = $"{(maintenance ? "Maintenance active" : "Connexions ouvertes")} · {players.Count} joueur(s) encore connecté(s)";
+        MaintenanceState.Text = $"{(maintenance ? "Maintenance active" : "Connexions ouvertes")} · {players.Count} joueur{(players.Count > 1 ? "s" : "")} connecté{(players.Count > 1 ? "s" : "")}";
+        var tone = (System.Windows.Media.Brush)FindResource(maintenance ? "Warning" : "Success");
+        MaintenanceIcon.Foreground = tone; MaintenanceHalo.Fill = tone; MaintenanceIcon.Text = maintenance ? "\uE90F" : "\uE8FB";
         AdminState.Text = "Commandes disponibles. Les modifications sont inscrites dans le journal d’administration.";
     }
     private static string Short(string value) => value.Length > 8 ? value[..8] : value;
@@ -72,6 +75,10 @@ public partial class AdminPanelView : UserControl
     {
         if (PlayerTarget is null) return;
         string command = CommandChoice.SelectedValue as string ?? "";
+        if (CommandTiles.SelectedValue as string != command) CommandTiles.SelectedValue = command;
+        var tile = Tiles.FirstOrDefault(item => item.Id == command);
+        CommandTitle.Text = tile?.Title ?? ""; CommandDetail.Text = tile?.Long ?? "";
+        ExecuteButton.Style = (Style)FindResource(tile?.Danger == true ? "DangerButton" : "Primary");
         void Show(FrameworkElement view, bool visible) => view.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         Show(PlayerTarget, command == "player.kick"); Show(AccountTarget, command is "account.ban" or "eclats.adjust" or "casino.refund");
         Show(BanTarget, command == "account.unban"); Show(RoomTarget, command is "room.close" or "room.update");
@@ -80,6 +87,22 @@ public partial class AdminPanelView : UserControl
         AmountHint.Text = command == "casino.refund" ? "De 1 à 9 999 jetons, remis par le parcours de réclamation du jeu." : "Montant positif pour créditer, négatif pour débiter. Le serveur refusera un solde négatif.";
         if (command == "room.update") LoadRoomOptions();
     }
+    private void CommandTile_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (CommandTiles.SelectedValue is string command && CommandChoice.SelectedValue as string != command) CommandChoice.SelectedValue = command;
+    }
+    private sealed record CommandTile(string Id, string Title, string Detail, string Long, string Glyph, bool Danger);
+    private static readonly CommandTile[] Tiles =
+    [
+        new("player.kick", "Expulser un joueur", "Ferme sa connexion", "Ferme la connexion du joueur choisi. Il peut se reconnecter aussitôt.", "\uE8F8", true),
+        new("account.ban", "Bannir un compte", "Refuse ses connexions", "Refuse les connexions de ce compte pour une durée choisie ou sans limite, avec un motif.", "\uE733", true),
+        new("account.unban", "Lever un bannissement", "Rétablit un compte", "Retire un bannissement en cours. Le compte peut se reconnecter.", "\uE8FB", false),
+        new("room.close", "Fermer un salon", "Fait sortir les membres", "Fait sortir tous les membres puis supprime le salon. La confirmation demande son nom.", "\uE711", true),
+        new("room.update", "Modifier un salon", "Capacité et visibilité", "Change la capacité (2 à 10) ou la visibilité d’un salon. Seules les valeurs modifiées sont envoyées.", "\uE70F", false),
+        new("maintenance.set", "Mode maintenance", "Bloque les arrivées", "Refuse les nouvelles connexions et laisse finir les parties en cours.", "\uE90F", false),
+        new("eclats.adjust", "Corriger des Éclats", "Crédit ou débit", "Crédite ou débite des Éclats avec un motif. Le serveur refuse un solde négatif.", "\uE8C7", false),
+        new("casino.refund", "Rendre des jetons", "Remboursement casino", "Rend des jetons de casino, remis par le parcours de réclamation du jeu.", "\uE7BF", false)
+    ];
     private void Room_Changed(object sender, SelectionChangedEventArgs e) { if (!refreshingRooms && RoomCapacity is not null) LoadRoomOptions(); }
     private void LoadRoomOptions()
     {
@@ -158,10 +181,28 @@ public partial class AdminPanelView : UserControl
         if (PanelJson.Date(PanelJson.Get(data, "activityAvailableSince")) is { } since) StatsScope.Text += $" Historique disponible depuis le {since.UtcDateTime:dd/MM/yyyy HH:mm} UTC.";
         var sections = new List<StatisticsSection>();
         var totals = PanelJson.Get(data, "totals");
-        sections.Add(new("Ensemble du serveur", ["Comptes : " + PanelJson.Text(PanelJson.Get(totals, "accounts")), "Éclats en circulation : " + PanelJson.Text(PanelJson.Get(totals, "eclatsInCirculation")), "Tirages : " + PanelJson.Text(PanelJson.Get(totals, "pulls")), "Œufs chromatiques obtenus : " + PanelJson.Text(PanelJson.Get(totals, "shiny"))]));
-        sections.Add(new("Tirages par bannière", PanelJson.Array(PanelJson.Get(data, "drawsByBanner")).Select(item => $"Bannière {PanelJson.Text(PanelJson.Get(item, "banner"))} · {PanelJson.Text(PanelJson.Get(item, "pulls"))} tirage(s), {PanelJson.Text(PanelJson.Get(item, "eggs"))} œuf(s), {PanelJson.Text(PanelJson.Get(item, "shiny"))} chromatique(s)").ToList()));
-        sections.Add(new("Casino — mises et gains", PanelJson.Array(PanelJson.Get(data, "casinoByGame")).Select(item => $"{Game(PanelJson.String(PanelJson.Get(item, "game")))} · {Currency(PanelJson.String(PanelJson.Get(item, "currency")))} · {PanelJson.Text(PanelJson.Get(item, "rounds"))} partie(s), mises {PanelJson.Text(PanelJson.Get(item, "wagers"))}, gains {PanelJson.Text(PanelJson.Get(item, "payouts"))}").ToList()));
-        sections.Add(new("Joueurs actifs par jour", PanelJson.Array(PanelJson.Get(data, "activePlayersByDay")).Select(item => $"{PanelJson.Text(PanelJson.Get(item, "day"))} · {PanelJson.Text(PanelJson.Get(item, "players"))} joueur(s)").ToList()));
+        string N(JsonElement value) => PanelJson.Number(value) is { } n ? n.ToString("N0", French) : "—";
+        sections.Add(new("Ensemble du serveur", [new("Comptes", N(PanelJson.Get(totals, "accounts")), "\uE716"), new("Éclats en circulation", N(PanelJson.Get(totals, "eclatsInCirculation")), "\uE945"), new("Tirages", N(PanelJson.Get(totals, "pulls")), "\uE8B1"), new("Œufs chromatiques", N(PanelJson.Get(totals, "shiny")), "\uE734")], []));
+        var banners = PanelJson.Array(PanelJson.Get(data, "drawsByBanner")).ToList();
+        double bannerMax = Math.Max(1, banners.Select(item => PanelJson.Number(PanelJson.Get(item, "pulls")) ?? 0).DefaultIfEmpty(0).Max());
+        sections.Add(new("Tirages par bannière", [], banners.Select(item => Bar($"Bannière {PanelJson.Text(PanelJson.Get(item, "banner"))}", $"{N(PanelJson.Get(item, "pulls"))} tirages · {N(PanelJson.Get(item, "eggs"))} œufs · {N(PanelJson.Get(item, "shiny"))} chromatiques", PanelJson.Number(PanelJson.Get(item, "pulls")) ?? 0, bannerMax)).ToList()));
+        var games = PanelJson.Array(PanelJson.Get(data, "casinoByGame")).ToList();
+        double gameMax = Math.Max(1, games.Select(item => PanelJson.Number(PanelJson.Get(item, "wagers")) ?? 0).DefaultIfEmpty(0).Max());
+        sections.Add(new("Casino — mises et gains", [], games.Select(item =>
+        {
+            double wagers = PanelJson.Number(PanelJson.Get(item, "wagers")) ?? 0, payouts = PanelJson.Number(PanelJson.Get(item, "payouts")) ?? 0;
+            string rate = wagers > 0 ? $" · redistribué {(payouts / wagers).ToString("P0", French)}" : "";
+            return Bar($"{Game(PanelJson.String(PanelJson.Get(item, "game")))} ({Currency(PanelJson.String(PanelJson.Get(item, "currency")))})", $"{N(PanelJson.Get(item, "rounds"))} parties · mises {N(PanelJson.Get(item, "wagers"))}{rate}", wagers, gameMax);
+        }).ToList()));
+        var days = PanelJson.Array(PanelJson.Get(data, "activePlayersByDay")).ToList();
+        double dayMax = Math.Max(1, days.Select(item => PanelJson.Number(PanelJson.Get(item, "players")) ?? 0).DefaultIfEmpty(0).Max());
+        sections.Add(new("Joueurs actifs par jour", [], days.Select(item =>
+        {
+            string day = PanelJson.String(PanelJson.Get(item, "day"));
+            string label = DateTime.TryParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date.ToString("dddd d MMMM", French) : day;
+            double players = PanelJson.Number(PanelJson.Get(item, "players")) ?? 0;
+            return Bar(label, $"{players.ToString("N0", French)} joueur{(players > 1 ? "s" : "")}", players, dayMax);
+        }).ToList()));
         StatsTables.ItemsSource = sections;
     }
     private static string Game(string value) => value switch { "slots" => "Machines", "plinko" => "Plinko", "blackjack" => "Blackjack", _ => value };
@@ -228,5 +269,10 @@ public partial class AdminPanelView : UserControl
         AdminState.Text = "Chargez les commandes d’un serveur compatible."; ConfigState.Text = "Configuration à charger"; loading = false;
     }
     internal void CaptureTab(string tab) => (tab == "config" ? ConfigTab : tab == "stats" ? StatsTab : CommandsTab).IsChecked = true;
-    private sealed record StatisticsSection(string Title, IReadOnlyList<string> Rows);
+    private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
+    private static StatisticsRow Bar(string label, string value, double amount, double max)
+        => new(label, value, new GridLength(Math.Max(0, amount), GridUnitType.Star), new GridLength(Math.Max(0, max - amount) + (amount <= 0 ? 1 : 0), GridUnitType.Star));
+    private sealed record StatisticsKpi(string Label, string Value, string Glyph);
+    private sealed record StatisticsRow(string Label, string Value, GridLength Fill, GridLength Rest);
+    private sealed record StatisticsSection(string Title, IReadOnlyList<StatisticsKpi> Kpis, IReadOnlyList<StatisticsRow> Rows) { public bool HasRows => Rows.Count > 0; }
 }

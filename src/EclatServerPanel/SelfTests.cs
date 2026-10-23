@@ -150,7 +150,8 @@ internal static partial class SelfTests
         Assert(groups.Any(group => group.Count() == 5) && groups.Any(group => group.Count() == 12), "Demo must exercise the five-player fan and the twelve-player list");
         Assert(groups.Single(group => group.Count() == 12).Select(player => player.GetProperty("roomId").GetString()).Distinct().Count() == 2, "A map group must aggregate players from different rooms");
         Assert(players.All(player => player.GetProperty("accountFingerprint").GetString()!.Length == 8), "The monitor must expose only eight fingerprint characters");
-        Assert(monitor.GetProperty("mapAtlas").GetProperty("sections").GetArrayLength() == 4, "Demo atlas must contain synthetic geometry");
+        var demoSections = monitor.GetProperty("mapAtlas").GetProperty("sections").EnumerateArray().Select(section => section.GetProperty("id").GetString()!).ToArray();
+        Assert(demoSections.Length >= 20 && demoSections.All(id => id.StartsWith("demo-", StringComparison.Ordinal)), "Demo atlas must contain a full synthetic region");
         var overview = Send("admin.overview");
         Assert(overview.GetProperty("connectedPlayers").GetArrayLength() == 20 && overview.GetProperty("bans").GetArrayLength() == 1, "Demo administration must include connected players and one existing ban");
         string hash = overview.GetProperty("accounts")[0].GetProperty("accountHash").GetString()!;
