@@ -30,6 +30,10 @@ Le dépôt contient le panel et son outil d’administration Linux. Il ne contie
 
 Le panel est conçu pour un serveur Éclat compatible avec l’outil Linux de ce dépôt. Il ne détecte pas automatiquement les commandes de n’importe quel serveur Pokémon.
 
+## Télécharger
+
+Prendre l'archive Windows dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l'archive.
+
 ## Première connexion
 
 1. Préparer le VPS en suivant le [guide de déploiement](docs/deploiement.md).
