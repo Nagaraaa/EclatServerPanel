@@ -92,6 +92,23 @@ Sur le PC, ouvrir le panel et renseigner :
 
 Valider l’empreinte après comparaison avec la console, puis vérifier l’état et télécharger une sauvegarde. Faire ensuite une connexion depuis le client de jeu : le test local du panel ne vérifie pas toute la route Internet des joueurs.
 
+## Mettre à jour le panel et l’outil Linux
+
+Décompresser la nouvelle version Windows dans un dossier distinct, puis ouvrir son exécutable. Les réglages et les clés restent dans le profil Windows. Garder l’ancien dossier permet de revenir à la version précédente.
+
+Pour mettre à jour uniquement l’outil Linux, copier `server/eclat-admin.py` vers `/root/eclat-admin.new.py` sur le VPS, puis exécuter depuis le compte administrateur :
+
+```sh
+cp -p /usr/local/sbin/eclat-admin /root/eclat-admin.previous.py
+python3 -m py_compile /root/eclat-admin.new.py
+install -o root -g root -m 0755 /root/eclat-admin.new.py /usr/local/sbin/eclat-admin
+printf '{"action":"status"}\n' | /usr/local/sbin/eclat-admin
+```
+
+Cette mise à jour ne remplace ni la configuration ni les données du jeu et ne redémarre pas son service. Si le contrôle échoue, rétablir l’ancien outil avec `install -o root -g root -m 0755 /root/eclat-admin.previous.py /usr/local/sbin/eclat-admin`, puis relancer le contrôle. Ne pas restaurer une ancienne base pour revenir à une ancienne version du panel.
+
+Le panel accepte également les réponses des versions précédentes de l’outil. La version actuelle vérifie en plus que le processus qui fournit le suivi des joueurs appartient au service du jeu ; cela évite de montrer l’activité d’un processus terminé.
+
 ## Contrôle de disponibilité et sauvegardes
 
 Le minuteur `eclat-watchdog.timer` contrôle le jeu environ chaque minute. Après trois échecs consécutifs du protocole, il redémarre le service. Il laisse un service volontairement arrêté dans cet état. Un redémarrage peut interrompre une partie ; consulter les journaux si cela se répète.

@@ -21,6 +21,12 @@ public partial class MainWindow : Window
     private readonly bool demo;
     private ConnectionSettings settings;
     private bool busy;
+    private bool closed, lastCheckFailed;
+    private bool suppressNavigationLoad;
+    private readonly SemaphoreSlim operationGate = new(1, 1);
+    private int pendingOperations;
+    private ConnectionSettings? operationSettings;
+    private ConnectionSettings ActiveSettings => operationSettings ?? settings;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(RefreshSeconds) };
     private string currentPage = "Overview";
     private readonly Dictionary<string, FrameworkElement> pages;
@@ -39,13 +45,16 @@ public partial class MainWindow : Window
     private DateTime? lastCheck;
     private TaskCompletionSource<bool>? dialog;
     private string? dialogRequired;
+    private long? lastGamePid, excludedGamePid;
 
-    public MainWindow(bool demo)
+    public MainWindow(bool demo) : this(demo, null, null, true) { }
+
+    internal MainWindow(bool demo, IPanelTransport? injectedTransport, ConnectionSettings? injectedSettings, bool automaticRefresh)
     {
         InitializeComponent();
         this.demo = demo;
-        transport = demo ? new DemoTransport() : new SshTransport();
-        settings = demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load();
+        transport = injectedTransport ?? (demo ? new DemoTransport() : new SshTransport());
+        settings = injectedSettings ?? (demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load());
         pages = new() { ["Overview"] = OverviewPage, ["Sessions"] = SessionsPage, ["Logs"] = LogsPage, ["Backups"] = BackupsPage, ["Diagnostics"] = DiagnosticsPage, ["Connection"] = ConnectionPage };
         navigation = new() { ["Overview"] = NavOverview, ["Sessions"] = NavSessions, ["Logs"] = NavLogs, ["Backups"] = NavBackups, ["Diagnostics"] = NavDiagnostics, ["Connection"] = NavConnection };
         HostBox.Text = settings.Host;
@@ -55,23 +64,36 @@ public partial class MainWindow : Window
         EndpointText.Text = string.IsNullOrEmpty(settings.Host) ? "Aucun serveur configuré" : $"{settings.User}@{settings.Host}";
         ModeBadge.Visibility = demo ? Visibility.Visible : Visibility.Collapsed;
         RefreshTrustChip();
+        HostBox.TextChanged += (_, _) => RefreshTrustChip();
+        PortBox.TextChanged += (_, _) => RefreshTrustChip();
         UpdateServiceButtons(null);
         LogSearch.TextChanged += (_, _) => LogSearchHint.Visibility = LogSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         StateChanged += (_, _) => { Root.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0); MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922"; };
         Loaded += async (_, _) =>
         {
+            suppressNavigationLoad = true;
             navigation[string.IsNullOrEmpty(settings.Host) ? "Connection" : "Overview"].IsChecked = true;
+            suppressNavigationLoad = false;
+            if (!automaticRefresh) return;
             if (demo) Toast("Mode démonstration : informations fictives, aucune connexion au VPS.", ToastKind.Info);
             if (demo) await SeedDemoHistoryAsync();
             if (!string.IsNullOrEmpty(settings.Host)) await RefreshAsync();
             timer.Start();
             RestartRefreshRing();
         };
-        timer.Tick += async (_, _) => { RestartRefreshRing(); if (!busy && currentPage is "Overview" or "Sessions" && !string.IsNullOrEmpty(settings.Host)) await RefreshAsync(); };
+        timer.Tick += async (_, _) =>
+        {
+            RestartRefreshRing();
+            if (!busy && dialog is null && !string.IsNullOrEmpty(settings.Host))
+            {
+                if (currentPage == "Diagnostics") await LoadDiagnosticsAsync();
+                else await RefreshAsync();
+            }
+        };
         var clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         clock.Tick += (_, _) => UpdateCheckAge();
         clock.Start();
-        Closed += (_, _) => { timer.Stop(); clock.Stop(); };
+        Closed += (_, _) => { closed = true; timer.Stop(); clock.Stop(); dialog?.TrySetResult(false); dialog = null; };
     }
 
     // The demonstration starts with a few minutes of history, like a panel left open.
@@ -79,7 +101,7 @@ public partial class MainWindow : Window
     {
         for (var i = 0; i < 14; i++)
         {
-            var data = await transport.SendAsync(settings, "status");
+            var data = await transport.SendAsync(ActiveSettings, "status");
             var monitor = Get(data, "monitor");
             Push(playersHistory, Get(monitor, "players").GetArrayLength());
             Push(roomsHistory, Get(monitor, "rooms").GetArrayLength() - (i < 4 ? 1 : 0));
@@ -99,9 +121,11 @@ public partial class MainWindow : Window
         if (pages is null) return;
         var page = (string)((RadioButton)sender).Tag;
         ShowPage(page);
+        if (suppressNavigationLoad) return;
         if (page == "Logs") await LoadLogsAsync();
         else if (page == "Backups") await LoadBackupsAsync();
-        else if (page == "Diagnostics" && DiagnosticSections.Items.Count == 0) await LoadDiagnosticsAsync();
+        else if (page == "Diagnostics") await LoadDiagnosticsAsync();
+        else if (page is "Overview" or "Sessions" && !string.IsNullOrEmpty(settings.Host)) await RefreshAsync();
     }
 
     private void ShowPage(string name)
@@ -129,7 +153,7 @@ public partial class MainWindow : Window
 
     public async Task WaitForIdleAsync()
     {
-        while (busy) await Task.Delay(50);
+        while (pendingOperations > 0) await Task.Delay(20);
     }
 
     // Capture helper: show a page and let its animations settle.
@@ -150,17 +174,33 @@ public partial class MainWindow : Window
     // ---- Busy state, toasts and refresh ring ---------------------------
     private async Task RunAsync(string activity, Func<Task> work)
     {
-        if (busy) return;
-        busy = true;
-        ActivityText.Text = activity;
-        SetBusy(true);
-        try { await work(); }
+        if (closed) return;
+        pendingOperations++;
+        await operationGate.WaitAsync();
+        bool failed = false;
+        try
+        {
+            if (closed) return;
+            busy = true;
+            operationSettings = settings.Snapshot();
+            ActivityText.Text = activity;
+            SetBusy(true);
+            await work();
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            failed = true;
             Toast(ex.Message, ToastKind.Error);
             ActivityText.Text = "Action interrompue";
         }
-        finally { busy = false; SetBusy(false); if (ActivityText.Text == activity) ActivityText.Text = "Prêt"; }
+        finally
+        {
+            operationSettings = null;
+            busy = false;
+            pendingOperations--;
+            if (!closed) { SetBusy(false); if (!failed) ActivityText.Text = "Prêt"; }
+            operationGate.Release();
+        }
     }
 
     private void SetBusy(bool on)
@@ -168,6 +208,7 @@ public partial class MainWindow : Window
         Cursor = on ? System.Windows.Input.Cursors.AppStarting : null;
         BusyBar.Visibility = on ? Visibility.Visible : Visibility.Hidden;
         RefreshButton.IsEnabled = !on;
+        foreach (var page in pages.Values) page.IsEnabled = !on;
         var spin = (Storyboard)FindResource("Spin");
         var sweep = (Storyboard)FindResource("Busy");
         if (on) { spin.Begin(this, true); sweep.Begin(this, true); }
@@ -182,7 +223,9 @@ public partial class MainWindow : Window
     private void UpdateCheckAge()
     {
         if (lastCheck is null) return;
+        if (lastCheckFailed) { UpdatedText.Text = "Dernier contrôle en échec"; return; }
         var age = (int)(DateTime.Now - lastCheck.Value).TotalSeconds;
+        if (age > PanelData.MaximumAge.TotalSeconds) { MarkStatusUnknown("Le dernier contrôle date de plus d’une minute. Actualisez pour connaître l’état actuel."); return; }
         UpdatedText.Text = age < 5 ? "Contrôlé à l’instant" : age < 60 ? $"Contrôlé il y a {age} s" : $"Contrôlé à {lastCheck:HH:mm}";
     }
 
@@ -231,7 +274,7 @@ public partial class MainWindow : Window
     private Task<bool> ConfirmAsync(string title, string message, string confirmText, bool danger, string? code = null, string? requiredText = null)
     {
         dialog?.TrySetResult(false);
-        dialog = new TaskCompletionSource<bool>();
+        dialog = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         dialogRequired = requiredText;
         DialogTitle.Text = title;
         DialogMessage.Text = message;
@@ -259,12 +302,16 @@ public partial class MainWindow : Window
 
     private void CloseDialog(bool result)
     {
+        if (result && dialogRequired is not null && DialogInput.Text != dialogRequired) return;
+        var completedDialog = dialog;
+        if (completedDialog is null) return;
+        dialog = null;
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150));
-        fade.Completed += (_, _) => DialogLayer.Visibility = Visibility.Collapsed;
+        fade.Completed += (_, _) => { if (dialog is null) DialogLayer.Visibility = Visibility.Collapsed; };
         DialogLayer.BeginAnimation(OpacityProperty, null);
         DialogCard.BeginAnimation(OpacityProperty, fade);
         DialogDim.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(150)));
-        dialog?.TrySetResult(result);
+        completedDialog.TrySetResult(result);
     }
 
     private void DialogInput_Changed(object sender, TextChangedEventArgs e) => DialogConfirm.IsEnabled = dialogRequired is null || DialogInput.Text == dialogRequired;
@@ -274,18 +321,53 @@ public partial class MainWindow : Window
     // ---- Status --------------------------------------------------------
     public async Task RefreshAsync() => await RunAsync("Vérification du service et du protocole…", async () =>
     {
-        try { RenderStatus(await transport.SendAsync(settings, "status")); }
+        try { RenderStatus(await transport.SendAsync(ActiveSettings, "status")); }
         catch
         {
-            SetState(StateTone.Unknown, "État non confirmé", "Le dernier contrôle a échoué. Les valeurs affichées peuvent être périmées.");
-            UpdatedText.Text = "Dernier contrôle en échec";
-            PlayersValue.Show(null); RoomsValue.Show(null); LatencyValue.Show(null);
-            ShowPeople([], [], "Activité non confirmée");
+            MarkStatusUnknown("Le dernier contrôle a échoué. Actualisez pour connaître l’état du serveur.");
             throw;
         }
     });
 
     private enum StateTone { Online, Degraded, Offline, Unknown }
+
+    private void MarkStatusUnknown(string detail)
+    {
+        lastCheckFailed = true;
+        SetState(StateTone.Unknown, "État non confirmé", detail);
+        UpdatedText.Text = "Dernier contrôle en échec";
+        UpdateServiceButtons(null);
+        StatusChips.Children.Clear();
+        PlayersValue.Show(null); RoomsValue.Show(null); LatencyValue.Show(null);
+        PlayersBadge.Visibility = Visibility.Collapsed;
+        ShowPeople([], [], "Activité non confirmée");
+        SessionsText.Text = "Activité non confirmée : aucun état actuel disponible.";
+        UptimeValue.Text = UptimeDetail.Text = HostText.Text = "—";
+        MemoryGauge.Animate(0); DiskGauge.Animate(0); ProcessGauge.Animate(0);
+        MemoryPercent.Text = DiskPercent.Text = ProcessValue.Text = "—";
+        MemoryDetail.Text = DiskDetail.Text = ProcessDetail.Text = "Mesure non confirmée";
+        LoadText.Text = LastErrorText.Text = "—";
+        foreach (var counter in new[] { CounterConnections, CounterDisconnections, CounterRooms, CounterJoins, CounterErrors }) counter.Show(null);
+        DiagnosticSections.ItemsSource = Array.Empty<DiagnosticSection>();
+        DiagnosticsText.Text = "Diagnostic non confirmé : aucun état actuel disponible.";
+        DiagnosticsEmpty.Visibility = Visibility.Visible;
+    }
+
+    private void ResetConnectionData()
+    {
+        lastCheck = null;
+        lastGamePid = excludedGamePid = null;
+        MarkStatusUnknown("Connexion modifiée. Le nouvel hôte doit être contrôlé.");
+        playersHistory.Clear(); roomsHistory.Clear(); latencyHistory.Clear(); loadHistory.Clear();
+        PlayersSpark.Show([]); RoomsSpark.Show([]); LatencySpark.Show([]); LoadSpark.Show([]);
+        logLines.Clear(); ApplyLogFilter(false);
+        BackupRows.ItemsSource = Array.Empty<BackupItem>();
+        BackupsEmpty.Visibility = Visibility.Visible;
+        BackupCount.Show(null); BackupSize.Text = BackupLatest.Text = "—";
+        DiagnosticSections.ItemsSource = Array.Empty<DiagnosticSection>();
+        DiagnosticsText.Text = "Aucun diagnostic pour cette connexion.";
+        DiagnosticsEmpty.Visibility = Visibility.Visible;
+    }
 
     private void SetState(StateTone tone, string title, string detail)
     {
@@ -318,31 +400,41 @@ public partial class MainWindow : Window
         var monitor = Get(data, "monitor");
         var network = Get(data, "network");
         var host = Get(data, "host");
-        bool active = Text(Get(service, "active")) is "active" or "True" or "true";
+        var serviceState = Text(Get(service, "active"));
+        if (serviceState is not ("active" or "inactive" or "failed" or "activating" or "deactivating" or "reloading"))
+            throw new InvalidOperationException("La réponse ne contient pas un état de service reconnu.");
+        bool active = serviceState == "active";
+        bool transition = serviceState is "activating" or "deactivating" or "reloading";
         bool responds = Get(protocol, "ok").ValueKind == JsonValueKind.True;
-        if (responds) SetState(StateTone.Online, "En ligne", "Le service tourne et le jeu répond aux joueurs depuis le VPS.");
+        if (active && responds) SetState(StateTone.Online, "En ligne", "Le jeu répond sur le VPS. L’annuaire et le tunnel indiquent l’état déclaré de l’accès Internet.");
+        else if (transition) SetState(StateTone.Degraded, "Service en transition", "Le service change d’état. Le prochain contrôle précisera le résultat.");
+        else if (responds) SetState(StateTone.Degraded, "Jeu détecté, service arrêté", "Le port du jeu répond mais le service attendu n’est pas actif. Consultez le diagnostic.");
         else if (active) SetState(StateTone.Degraded, "Service actif, jeu indisponible", "Le processus tourne mais le protocole du jeu ne répond pas. Consultez les journaux avant de redémarrer.");
         else SetState(StateTone.Offline, "Service arrêté", "Le service est arrêté ou en échec. Le diagnostic précise son état.");
-        UpdateServiceButtons(active);
+        UpdateServiceButtons(transition ? null : active);
 
         double? latency = responds && Get(protocol, "latencyMs").ValueKind == JsonValueKind.Number ? Get(protocol, "latencyMs").GetDouble() : null;
         string publication = Fr(Text(Get(network, "publication")));
         string tunnel = Fr(Text(Get(network, "tunnel")));
-        bool networkStale = DateTimeOffset.TryParse(Text(Get(network, "updatedAt")), out var networkAt) && DateTimeOffset.UtcNow - networkAt > TimeSpan.FromMinutes(1);
+        bool networkStale = !PanelData.IsRecent(network, DateTimeOffset.UtcNow);
         StatusChips.Children.Clear();
         Chip("\uE7F4", "Service", $"{Text(Get(service, "active"))} · {Text(Get(service, "sub"))}", active);
         Chip("\uEC4A", "Protocole", responds ? $"{latency:0.0} ms" : "sans réponse", responds);
+        LatencyValue.ToolTip = "Durée de l’échange de contrôle effectué localement sur le VPS.";
         Chip("\uE774", "Annuaire Coop", publication + (networkStale ? " (ancien)" : ""), publication == "disponible" && !networkStale);
         Chip("\uE968", "Tunnel", tunnel + (networkStale ? " (ancien)" : ""), tunnel == "connecté" && !networkStale);
 
         var players = Get(monitor, "players");
         var rooms = Get(monitor, "rooms");
-        bool fresh = active && responds && !(DateTimeOffset.TryParse(Text(Get(monitor, "updatedAt")), out var monitorAt) && DateTimeOffset.UtcNow - monitorAt > TimeSpan.FromMinutes(1));
+        long monitorPid = Number(Get(monitor, "pid"));
+        bool fresh = PanelData.HasActivity(monitor, active, responds, DateTimeOffset.UtcNow)
+            && (excludedGamePid is null || monitorPid > 0 && monitorPid != excludedGamePid);
+        if (fresh && monitorPid > 0) { lastGamePid = monitorPid; excludedGamePid = null; }
         var playerItems = fresh ? PlayerItems(players, rooms) : [];
         var roomItems = fresh ? RoomItems(rooms, players) : [];
-        PlayersValue.Show(fresh ? playerItems.Count : null);
-        RoomsValue.Show(fresh ? roomItems.Count : null);
-        LatencyValue.Show(latency);
+        SetCounter(PlayersValue, fresh ? playerItems.Count : null);
+        SetCounter(RoomsValue, fresh ? roomItems.Count : null);
+        SetCounter(LatencyValue, latency);
         if (fresh) { Push(playersHistory, playerItems.Count); Push(roomsHistory, roomItems.Count); }
         if (latency is { } ms) Push(latencyHistory, ms);
         PlayersSpark.Show(playersHistory.ToList()); RoomsSpark.Show(roomsHistory.ToList()); LatencySpark.Show(latencyHistory.ToList());
@@ -357,16 +449,16 @@ public partial class MainWindow : Window
 
         long total = Number(Get(metrics, "memoryTotalBytes")), available = Number(Get(metrics, "memoryAvailableBytes"));
         long diskTotal = Number(Get(metrics, "diskTotalBytes")), diskFree = Number(Get(metrics, "diskFreeBytes"));
-        long rss = Number(Get(Get(monitor, "memory"), "rssBytes"));
-        if (total > 0) { var used = total - available; MemoryGauge.Stroke = Tone((double)used / total); MemoryGauge.Animate((double)used / total); MemoryPercent.Text = $"{100d * used / total:0} %"; MemoryDetail.Text = $"{Gb(used)} / {Gb(total)}"; }
+        long rss = fresh ? Number(Get(Get(monitor, "memory"), "rssBytes")) : 0;
+        if (ValidResourcePair(metrics, "memoryTotalBytes", "memoryAvailableBytes")) { var used = total - available; MemoryGauge.Stroke = Tone((double)used / total); MemoryGauge.Animate((double)used / total); MemoryPercent.Text = $"{100d * used / total:0} %"; MemoryDetail.Text = $"{Gb(used)} / {Gb(total)}"; }
         else { MemoryGauge.Animate(0); MemoryPercent.Text = "—"; MemoryDetail.Text = "Mesure indisponible"; }
-        if (diskTotal > 0) { var used = diskTotal - diskFree; DiskGauge.Stroke = Tone((double)used / diskTotal); DiskGauge.Animate((double)used / diskTotal); DiskPercent.Text = $"{100d * used / diskTotal:0} %"; DiskDetail.Text = $"{Gb(diskFree)} libres"; }
+        if (ValidResourcePair(metrics, "diskTotalBytes", "diskFreeBytes")) { var used = diskTotal - diskFree; DiskGauge.Stroke = Tone((double)used / diskTotal); DiskGauge.Animate((double)used / diskTotal); DiskPercent.Text = $"{100d * used / diskTotal:0} %"; DiskDetail.Text = $"{Gb(diskFree)} libres"; }
         else { DiskGauge.Animate(0); DiskPercent.Text = "—"; DiskDetail.Text = "Mesure indisponible"; }
         if (rss > 0 && total > 0)
         {
-            var share = (double)rss / Math.Max(1, total - available);
+            var share = (double)rss / total;
             ProcessGauge.Stroke = (Brush)FindResource("Crystal"); ProcessGauge.Animate(share);
-            ProcessValue.Text = (rss / 1048576d).ToString("0", French); ProcessDetail.Text = $"{share * 100:0} % de la mémoire utilisée";
+            ProcessValue.Text = (rss / 1048576d).ToString("0", French); ProcessDetail.Text = $"{share * 100:0} % de la mémoire du VPS";
         }
         else { ProcessGauge.Animate(0); ProcessValue.Text = "—"; ProcessDetail.Text = "Processus non mesuré"; }
         var load = Loads(Get(metrics, "load"));
@@ -374,20 +466,21 @@ public partial class MainWindow : Window
         if (load.Count > 0) Push(loadHistory, load[0]);
         LoadSpark.Show(loadHistory.ToList());
 
-        var counters = Get(monitor, "counters");
+        var counters = fresh ? Get(monitor, "counters") : default;
         CounterValue(CounterConnections, Get(counters, "connections"));
         CounterValue(CounterDisconnections, Get(counters, "disconnections"));
         CounterValue(CounterRooms, Get(counters, "roomsCreated"));
         CounterValue(CounterJoins, Get(counters, "roomJoins"));
         CounterValue(CounterErrors, Get(counters, "errors"));
-        var lastError = Get(monitor, "lastError");
-        LastErrorText.Text = lastError.ValueKind == JsonValueKind.Object
+        var lastError = fresh ? Get(monitor, "lastError") : default;
+        LastErrorText.Text = !fresh ? "Non confirmé" : lastError.ValueKind == JsonValueKind.Object
             ? Text(Get(lastError, "code")) + (DateTimeOffset.TryParse(Text(Get(lastError, "at")), out var errorAt) ? " · " + errorAt.ToLocalTime().ToString("dd/MM HH:mm", French) : "")
             : "Aucun";
-        LastErrorText.Foreground = (Brush)FindResource(lastError.ValueKind == JsonValueKind.Object ? "Warning" : "Success");
+        LastErrorText.Foreground = (Brush)FindResource(!fresh ? "Muted" : lastError.ValueKind == JsonValueKind.Object ? "Warning" : "Success");
 
-        SessionsText.Text = monitor.ValueKind == JsonValueKind.Undefined ? "Aucune donnée d’activité reçue." : Pretty(monitor);
+        SessionsText.Text = fresh ? Pretty(monitor) : "Activité non confirmée : données absentes ou périmées.";
         lastCheck = DateTime.Now;
+        lastCheckFailed = false;
         UpdateCheckAge();
     }
 
@@ -403,9 +496,9 @@ public partial class MainWindow : Window
     private void UpdateServiceButtons(bool? active)
     {
         // Only the actions that make sense now are offered.
-        StartButton.Visibility = active == true ? Visibility.Collapsed : Visibility.Visible;
-        RestartButton.Visibility = active == false ? Visibility.Collapsed : Visibility.Visible;
-        StopButton.Visibility = active == false ? Visibility.Collapsed : Visibility.Visible;
+        StartButton.Visibility = active == false ? Visibility.Visible : Visibility.Collapsed;
+        RestartButton.Visibility = active == true ? Visibility.Visible : Visibility.Collapsed;
+        StopButton.Visibility = active == true ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowPeople(List<PlayerItem> players, List<RoomItem> rooms, string? unavailable)
@@ -424,7 +517,13 @@ public partial class MainWindow : Window
     private static string Fr(string state) => state switch { "available" => "disponible", "unavailable" => "indisponible", "connected" => "connecté", "disconnected" => "déconnecté", var v => v };
     private static Brush Tone(double ratio) => ratio > 0.9 ? Motion.Hex("#FF5C7A") : ratio > 0.75 ? Motion.Hex("#FFB547") : (Brush)Application.Current.FindResource("Crystal");
     private static void Push(Queue<double> history, double value) { history.Enqueue(value); while (history.Count > HistoryLength) history.Dequeue(); }
-    private static void CounterValue(CountUpText target, JsonElement value) => target.Show(value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null);
+    private static void SetCounter(CountUpText target, double? value)
+    {
+        target.Show(value);
+        // WPF does not raise a value-change callback for an animation 0 -> 0.
+        if (value == 0 && target.Value == 0) target.Text = 0d.ToString(target.Format, French) + target.Suffix;
+    }
+    private static void CounterValue(CountUpText target, JsonElement value) => SetCounter(target, value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null);
     private static string Gb(long bytes) => (bytes / 1073741824d).ToString(bytes >= 10L * 1073741824 ? "0" : "0.0", French) + " Go";
     private static string Duration(long seconds)
     {
@@ -471,7 +570,7 @@ public partial class MainWindow : Window
             var name = First(room, "name", "code") ?? "Salon";
             var names = members.TryGetValue(id, out var list) ? list : Get(room, "players").ValueKind == JsonValueKind.Array ? Get(room, "players").EnumerateArray().Select(p => p.ToString()).ToList() : [];
             var count = Get(room, "count").ValueKind == JsonValueKind.Number ? Get(room, "count").GetInt32() : names.Count;
-            var capacity = Get(room, "capacity").ValueKind == JsonValueKind.Number ? Get(room, "capacity").GetInt32() : Math.Max(2, count);
+            var capacity = Get(room, "capacity").ValueKind == JsonValueKind.Number ? Get(room, "capacity").GetInt32() : 0;
             var isPrivate = First(room, "visibility") == "private";
             result.Add(new(name, isPrivate, count, capacity, names.Count > 0 ? string.Join(", ", names) : "Membres non communiqués"));
         }
@@ -488,6 +587,9 @@ public partial class MainWindow : Window
     private static JsonElement Get(JsonElement element, string key) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(key, out var value) ? value : default;
     private static string Text(JsonElement value) => value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? "—" : value.ToString();
     private static long Number(JsonElement value) => value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number) ? number : value.ValueKind == JsonValueKind.Number ? (long)value.GetDouble() : 0;
+    private static bool ValidResourcePair(JsonElement data, string totalKey, string freeKey)
+        => Get(data, totalKey).ValueKind == JsonValueKind.Number && Get(data, totalKey).TryGetInt64(out var total) && total > 0 && Get(data, freeKey).ValueKind == JsonValueKind.Number
+            && Get(data, freeKey).TryGetInt64(out var free) && free >= 0 && free <= total;
     private static string Pretty(JsonElement value) => JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
@@ -505,29 +607,54 @@ public partial class MainWindow : Window
 
     // ---- Service control -----------------------------------------------
     private async void Service_Click(object sender, RoutedEventArgs e)
+        => await ControlServiceAsync((string)((Button)sender).Tag);
+
+    internal Task ControlServiceAsync(string action) => RunAsync("Préparation de l’action…", async () =>
     {
-        if (busy) return;
-        var action = (string)((Button)sender).Tag;
+        if (action is not ("start" or "stop" or "restart")) throw new InvalidOperationException("Action de service inconnue.");
         if (action is "stop" or "restart" && !await ConfirmAsync(action == "stop" ? "Arrêter le serveur ?" : "Redémarrer le serveur ?",
             "Les parties en cours seront interrompues. Les joueurs devront se reconnecter.", action == "stop" ? "Arrêter" : "Redémarrer", danger: true)) return;
-        bool done = false;
-        await RunAsync(action == "start" ? "Démarrage du service…" : action == "stop" ? "Arrêt du service…" : "Redémarrage du service…", async () =>
+        if (closed) return;
+        ActivityText.Text = action == "start" ? "Démarrage du service…" : action == "stop" ? "Arrêt du service…" : "Redémarrage du service…";
+        bool acknowledged = false;
+        try
         {
-            await transport.SendAsync(settings, action);
-            Toast(action == "start" ? "Service démarré." : action == "stop" ? "Service arrêté." : "Service redémarré.");
-            done = true;
-        });
-        if (done) { await Task.Delay(1100); await RefreshAsync(); }
+            await transport.SendAsync(ActiveSettings, action); acknowledged = true;
+            if (action is "start" or "restart") excludedGamePid = lastGamePid;
+        }
+        finally { await RefreshAfterActionAsync(action, acknowledged); }
+    });
+
+    private async Task RefreshAfterActionAsync(string action, bool acknowledged)
+    {
+        try
+        {
+            var state = await transport.SendAsync(ActiveSettings, "status");
+            if (closed) return;
+            RenderStatus(state);
+            bool active = Text(Get(Get(state, "service"), "active")) == "active";
+            bool responds = Get(Get(state, "protocol"), "ok").ValueKind == JsonValueKind.True;
+            bool stopped = Text(Get(Get(state, "service"), "active")) == "inactive";
+            if (acknowledged)
+                Toast(action == "stop" && stopped ? "Service arrêté." : action != "stop" && active && responds ? "Le service est actif et le jeu répond." : "Commande reçue. Le dernier état du service est affiché ; le jeu peut encore être en démarrage.",
+                    action == "stop" && stopped || action != "stop" && active && responds ? ToastKind.Success : ToastKind.Info);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            MarkStatusUnknown("L’action a été envoyée, mais son résultat actuel n’a pas pu être contrôlé. Actualisez avant de décider d’une nouvelle action.");
+            Toast("Contrôle après action indisponible : " + ex.Message, ToastKind.Info);
+        }
     }
 
     // ---- Logs ----------------------------------------------------------
-    private static readonly Regex JournalLine = new(@"^(?<time>\d{4}-\d\d-\d\dT[\d:]+(?:[+-]\d{4}|Z)?)\s+\S+\s+(?<unit>[^:\s]+):\s?(?<message>.*)$");
+    private static readonly Regex JournalLine = new(@"^(?<time>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:[+-]\d\d:?\d\d|Z)?)\s+\S+\s+(?<unit>[^:\s]+):\s?(?<message>.*)$");
     private static readonly Regex ErrorWords = new(@"\b(error|erreur|fail(ed|ure)?|échec|exception|fatal|crash)\b", RegexOptions.IgnoreCase);
     private static readonly Regex WarnWords = new(@"\b(warn(ing)?|avertissement|indisponible|timeout|retry)\b", RegexOptions.IgnoreCase);
 
     private async Task LoadLogsAsync() => await RunAsync("Lecture des journaux…", async () =>
     {
-        var data = await transport.SendAsync(settings, "logs");
+        if (currentPage != "Logs") return;
+        var data = await transport.SendAsync(ActiveSettings, "logs");
         logLines = Text(Get(data, "text")).Split('\n').Where(line => line.Trim().Length > 0).Select(ParseLog).ToList();
         ApplyLogFilter(scrollToEnd: true);
     });
@@ -539,7 +666,7 @@ public partial class MainWindow : Window
         if (match.Success)
         {
             message = match.Groups["message"].Value;
-            time = DateTimeOffset.TryParseExact(match.Groups["time"].Value, ["yyyy-MM-ddTHH:mm:sszzz", "yyyy-MM-ddTHH:mm:sszz", "yyyy-MM-ddTHH:mm:ssK"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            time = DateTimeOffset.TryParse(match.Groups["time"].Value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)
                 ? at.ToLocalTime().ToString("HH:mm:ss") : match.Groups["time"].Value[11..Math.Min(19, match.Groups["time"].Value.Length)];
         }
         else if (Regex.Match(message, @"^(?<t>\d\d:\d\d:\d\d)\s+(?<m>.*)$") is { Success: true } simple) { time = simple.Groups["t"].Value; message = simple.Groups["m"].Value; }
@@ -564,11 +691,24 @@ public partial class MainWindow : Window
     // ---- Diagnostics ---------------------------------------------------
     private async Task LoadDiagnosticsAsync() => await RunAsync("Diagnostic du serveur…", async () =>
     {
-        var data = await transport.SendAsync(settings, "diagnostics");
-        DiagnosticsText.Text = Pretty(data);
-        DiagnosticSections.ItemsSource = DiagnosticCards(data);
-        DiagnosticsEmpty.Visibility = Visibility.Collapsed;
-        Motion.Enter(DiagnosticSections);
+        if (currentPage != "Diagnostics") return;
+        try
+        {
+            var data = await transport.SendAsync(ActiveSettings, "diagnostics");
+            RenderStatus(Get(data, "status"));
+            DiagnosticsText.Text = Pretty(data);
+            DiagnosticSections.ItemsSource = DiagnosticCards(data);
+            DiagnosticsEmpty.Visibility = Visibility.Collapsed;
+            Motion.Enter(DiagnosticSections);
+        }
+        catch
+        {
+            DiagnosticSections.ItemsSource = Array.Empty<DiagnosticSection>();
+            DiagnosticsText.Text = "Le diagnostic n’a pas pu être actualisé.";
+            DiagnosticsEmpty.Visibility = Visibility.Visible;
+            MarkStatusUnknown("Le diagnostic a échoué. Actualisez pour connaître l’état du serveur.");
+            throw;
+        }
     });
 
     private List<DiagnosticSection> DiagnosticCards(JsonElement data)
@@ -578,16 +718,19 @@ public partial class MainWindow : Window
         var metrics = Get(status, "metrics"); var host = Get(status, "host"); var monitor = Get(status, "monitor");
         Brush good = (Brush)FindResource("Success"), bad = (Brush)FindResource("Warning"), plain = (Brush)FindResource("Text");
         bool active = Text(Get(service, "active")) == "active", responds = Get(protocol, "ok").ValueKind == JsonValueKind.True;
+        bool fresh = PanelData.HasActivity(monitor, active, responds, DateTimeOffset.UtcNow)
+            && (excludedGamePid is null || Number(Get(monitor, "pid")) > 0 && Number(Get(monitor, "pid")) != excludedGamePid);
+        bool networkFresh = PanelData.IsRecent(network, DateTimeOffset.UtcNow);
         long total = Number(Get(metrics, "memoryTotalBytes")), available = Number(Get(metrics, "memoryAvailableBytes"));
         long diskTotal = Number(Get(metrics, "diskTotalBytes")), diskFree = Number(Get(metrics, "diskFreeBytes"));
         var sections = new List<DiagnosticSection>
         {
             new("Service systemd", "\uE7F4", [new("État", Text(Get(service, "active")), active ? good : bad), new("Sous-état", Text(Get(service, "sub")), plain), new("PID", Text(Get(service, "pid")), plain)]),
-            new("Protocole du jeu", "\uEC4A", [new("Réponse", responds ? "oui" : "non", responds ? good : bad), new("Latence", responds ? Text(Get(protocol, "latencyMs")) + " ms" : "—", plain), new("Erreur", Text(Get(protocol, "error")) is var err && err != "—" ? err : "aucune", err != "—" ? bad : plain)]),
+            new("Protocole du jeu", "\uEC4A", [new("Réponse", responds ? "oui" : "non", responds ? good : bad), new("Réponse locale VPS", responds ? Text(Get(protocol, "latencyMs")) + " ms" : "—", plain), new("Erreur", Text(Get(protocol, "error")) is var err && err != "—" ? err : "aucune", err != "—" ? bad : plain)]),
             new("Machine", "\uE977", [new("Nom", Text(Get(host, "name")), plain), new("Démarrée depuis", Number(Get(host, "uptimeSeconds")) is var up and > 0 ? Duration(up) : "—", plain), new("Node.js", Text(Get(host, "nodeVersion")), plain)]),
-            new("Ressources", "\uE9F5", [new("Mémoire", total > 0 ? $"{Gb(total - available)} / {Gb(total)}" : "—", plain), new("Disque libre", diskTotal > 0 ? $"{Gb(diskFree)} / {Gb(diskTotal)}" : "—", diskTotal > 0 && diskFree < diskTotal / 10 ? bad : plain), new("Charge", Loads(Get(metrics, "load")) is { Count: > 0 } l ? string.Join(" · ", l.Select(v => v.ToString("0.00", French))) : "—", plain)]),
-            new("Réseau Coop", "\uE968", [new("Annuaire", Fr(Text(Get(network, "publication"))), Text(Get(network, "publication")) == "available" ? good : bad), new("Tunnel", Fr(Text(Get(network, "tunnel"))), Text(Get(network, "tunnel")) == "connected" ? good : bad), new("Mis à jour", DateTimeOffset.TryParse(Text(Get(network, "updatedAt")), out var at) ? at.ToLocalTime().ToString("HH:mm:ss") : "—", plain)]),
-            new("Activité", "\uE716", [new("Joueurs", Get(monitor, "players").ValueKind == JsonValueKind.Array ? Get(monitor, "players").GetArrayLength().ToString() : "—", plain), new("Salons", Get(monitor, "rooms").ValueKind == JsonValueKind.Array ? Get(monitor, "rooms").GetArrayLength().ToString() : "—", plain), new("Sauvegardes", Text(Get(data, "backupCount")), plain)]),
+            new("Ressources", "\uE9F5", [new("Mémoire", ValidResourcePair(metrics, "memoryTotalBytes", "memoryAvailableBytes") ? $"{Gb(total - available)} / {Gb(total)}" : "—", plain), new("Disque libre", ValidResourcePair(metrics, "diskTotalBytes", "diskFreeBytes") ? $"{Gb(diskFree)} / {Gb(diskTotal)}" : "—", diskTotal > 0 && diskFree < diskTotal / 10 ? bad : plain), new("Charge", Loads(Get(metrics, "load")) is { Count: > 0 } l ? string.Join(" · ", l.Select(v => v.ToString("0.00", French))) : "—", plain)]),
+            new("Réseau Coop", "\uE968", [new("Annuaire", networkFresh ? Fr(Text(Get(network, "publication"))) : "Non confirmé", networkFresh && Text(Get(network, "publication")) == "available" ? good : bad), new("Tunnel", networkFresh ? Fr(Text(Get(network, "tunnel"))) : "Non confirmé", networkFresh && Text(Get(network, "tunnel")) == "connected" ? good : bad), new("Mis à jour", DateTimeOffset.TryParse(Text(Get(network, "updatedAt")), out var at) ? at.ToLocalTime().ToString("HH:mm:ss") : "—", plain)]),
+            new("Activité", "\uE716", [new("Joueurs", fresh ? Get(monitor, "players").GetArrayLength().ToString() : "—", plain), new("Salons", fresh ? Get(monitor, "rooms").GetArrayLength().ToString() : "—", plain), new("Sauvegardes", Text(Get(data, "backupCount")), plain)]),
         };
         if (Get(data, "journal").ValueKind == JsonValueKind.String)
         {
@@ -600,18 +743,21 @@ public partial class MainWindow : Window
     private async void Diagnostics_Click(object sender, RoutedEventArgs e) => await LoadDiagnosticsAsync();
 
     // ---- Backups -------------------------------------------------------
-    private async Task LoadBackupsAsync() => await RunAsync("Lecture des sauvegardes…", LoadBackupsCoreAsync);
+    private async Task LoadBackupsAsync() => await RunAsync("Lecture des sauvegardes…", async () =>
+    {
+        if (currentPage == "Backups") await LoadBackupsCoreAsync();
+    });
 
     private async Task LoadBackupsCoreAsync()
     {
-        var data = await transport.SendAsync(settings, "backups");
+        var data = await transport.SendAsync(ActiveSettings, "backups");
         var items = Get(data, "items");
-        var backups = items.ValueKind == JsonValueKind.Array ? items.EnumerateArray().Select(item => new BackupItem(Text(Get(item, "name")), Number(Get(item, "size")), Text(Get(item, "modifiedUtc")))).ToList() : [];
+        var backups = items.ValueKind == JsonValueKind.Array ? items.EnumerateArray().Select(item => new BackupItem(Text(Get(item, "name")), Number(Get(item, "size")), Text(Get(item, "modifiedUtc")), ActiveSettings.Snapshot())).ToList() : [];
         for (var i = 0; i < backups.Count; i++) backups[i].Latest = i == 0;
         BackupRows.ItemsSource = backups;
         Motion.Enter(BackupRows);
         BackupsEmpty.Visibility = backups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        BackupCount.Show(backups.Count);
+        SetCounter(BackupCount, backups.Count);
         BackupSize.Text = backups.Count == 0 ? "—" : $"{backups.Sum(b => b.Size) / 1048576d:0.0} Mo";
         BackupLatest.Text = backups.Count == 0 ? "Jamais" : backups[0].Age;
     }
@@ -620,10 +766,27 @@ public partial class MainWindow : Window
 
     private async void CreateBackup_Click(object sender, RoutedEventArgs e) => await RunAsync("Création d’un instantané cohérent…", async () =>
     {
-        var data = await transport.SendAsync(settings, "backup");
+        var data = await transport.SendAsync(ActiveSettings, "backup");
         Toast("Sauvegarde créée : " + Text(Get(data, "name")));
-        await LoadBackupsCoreAsync();
+        await RefreshBackupListAfterActionAsync();
     });
+
+    private async Task RefreshBackupListAfterActionAsync()
+    {
+        try { await LoadBackupsCoreAsync(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            BackupRows.ItemsSource = Array.Empty<BackupItem>();
+            BackupsEmpty.Visibility = Visibility.Visible;
+            BackupCount.Show(null); BackupSize.Text = BackupLatest.Text = "—";
+            Toast("Action confirmée, mais la liste des sauvegardes n’a pas pu être relue : " + ex.Message, ToastKind.Info);
+        }
+    }
+
+    private void CheckBackupOrigin(BackupItem item)
+    {
+        if (item.Origin != ActiveSettings) throw new InvalidOperationException("La connexion a changé. Actualisez les sauvegardes avant de choisir cet instantané.");
+    }
 
     private async void Download_Click(object sender, RoutedEventArgs e)
     {
@@ -631,29 +794,38 @@ public partial class MainWindow : Window
         if (demo) { Toast("Le téléchargement est disponible après connexion à un serveur réel.", ToastKind.Info); return; }
         var save = new SaveFileDialog { Title = "Enregistrer une copie de la base", Filter = "Base SQLite (*.sqlite)|*.sqlite", FileName = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(item.Name)) + ".sqlite", AddExtension = true, DefaultExt = ".sqlite" };
         if (save.ShowDialog(this) != true) return;
-        await RunAsync("Téléchargement et vérification SHA-256…", async () =>
-        {
-            var data = await transport.SendAsync(settings, "download", item.Name);
-            var bytes = SshTransport.VerifyDownload(data);
-            var temp = save.FileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try { await File.WriteAllBytesAsync(temp, bytes); File.Move(temp, save.FileName, true); }
-            finally { if (File.Exists(temp)) File.Delete(temp); }
-            Toast("Base enregistrée sur ce PC. Son empreinte SHA-256 correspond à celle du serveur.");
-        });
+        await DownloadBackupAsync(item, save.FileName);
     }
+
+    internal Task DownloadBackupAsync(BackupItem item, string destination) => RunAsync("Téléchargement et vérification SHA-256…", async () =>
+    {
+        CheckBackupOrigin(item);
+        var data = await transport.SendAsync(ActiveSettings, "download", item.Name);
+        await PanelFiles.SaveDownloadAsync(data, destination);
+        Toast("Base enregistrée sur ce PC. Son empreinte SHA-256 correspond à celle du serveur.");
+    });
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {
         if (busy || ((Button)sender).Tag is not BackupItem item) return;
-        if (!await ConfirmAsync("Restaurer cette sauvegarde ?", $"Instantané du {item.When}. Les données actuelles seront remplacées et les parties interrompues. Le serveur crée d’abord une copie de retour arrière.", "Restaurer", danger: true, code: item.Name, requiredText: "RESTAURER")) return;
-        await RunAsync("Restauration en cours. Patientez avant toute autre action…", async () =>
-        {
-            var data = await transport.SendAsync(settings, "restore", item.Name);
-            if (Get(data, "restored").ValueKind != JsonValueKind.True) throw new InvalidOperationException("La restauration n’a pas été confirmée par le serveur.");
-            Toast("Restauration terminée. Contrôlez le service et les données avant de reprendre les parties.");
-            await LoadBackupsCoreAsync();
-        });
+        await RestoreBackupAsync(item);
     }
+
+    internal Task RestoreBackupAsync(BackupItem item) => RunAsync("Préparation de la restauration…", async () =>
+    {
+        CheckBackupOrigin(item);
+        if (!await ConfirmAsync("Restaurer cette sauvegarde ?", $"Instantané du {item.When}. Les données actuelles seront remplacées et les parties interrompues. Le serveur crée d’abord une copie de retour arrière.", "Restaurer", danger: true, code: item.Name, requiredText: "RESTAURER") || closed) return;
+        ActivityText.Text = "Restauration en cours. Patientez avant toute autre action…";
+        try
+        {
+            var data = await transport.SendAsync(ActiveSettings, "restore", item.Name);
+            if (Get(data, "restored").ValueKind != JsonValueKind.True) throw new InvalidOperationException("La restauration n’a pas été confirmée par le serveur.");
+            excludedGamePid = lastGamePid;
+            Toast("Restauration terminée. Contrôlez le service et les données avant de reprendre les parties.");
+            await RefreshBackupListAfterActionAsync();
+        }
+        finally { await RefreshAfterActionAsync("restore", false); }
+    });
 
     // ---- Connection ----------------------------------------------------
     private ConnectionSettings ReadForm()
@@ -664,7 +836,9 @@ public partial class MainWindow : Window
 
     private void RefreshTrustChip()
     {
-        bool trusted = demo || File.Exists(ConnectionSettings.KnownHostsPath);
+        bool trusted = demo;
+        try { if (!trusted && transport is SshTransport) trusted = KnownHostsTrust.HasTrustedHost(ReadForm()); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { }
         TrustText.Text = trusted ? "✓ Empreinte enregistrée" : "Empreinte à vérifier";
         TrustText.Foreground = (Brush)FindResource(trusted ? "Success" : "Warning");
     }
@@ -681,32 +855,44 @@ public partial class MainWindow : Window
         bool saved = false;
         await RunAsync("Enregistrement des réglages locaux…", () =>
         {
-            var next = ReadForm(); next.Save(); settings = next;
-            EndpointText.Text = $"{settings.User}@{settings.Host}";
+            var next = ReadForm(); next.Save(); ApplyConnection(next);
             saved = true;
             return Task.CompletedTask;
         });
-        if (saved) { NavOverview.IsChecked = true; await RefreshAsync(); }
+        if (saved)
+        {
+            suppressNavigationLoad = true; NavOverview.IsChecked = true; suppressNavigationLoad = false;
+            await RefreshAsync();
+        }
+    }
+
+    internal void ApplyConnection(ConnectionSettings next)
+    {
+        settings = next.Snapshot();
+        EndpointText.Text = $"{settings.User}@{settings.Host}";
+        ResetConnectionData(); RefreshTrustChip();
     }
 
     private async void Trust_Click(object sender, RoutedEventArgs e)
     {
         if (demo) { Toast("Aucune empreinte réelle n’est chargée en démonstration.", ToastKind.Info); return; }
-        ConnectionSettings? form = null;
-        (string KeyLine, string Fingerprint)? scan = null;
-        await RunAsync("Lecture de l’empreinte publique du serveur…", async () => { form = ReadForm(); scan = await SshTransport.ScanFingerprintAsync(form); });
-        if (form is null || scan is null) return;
-        if (!await ConfirmAsync("Vérifier l’identité SSH", $"Serveur {form.Host}:{form.Port}. Comparez cette empreinte à celle de la console de l’hébergeur : sa lecture sur le réseau ne prouve pas l’identité du serveur. Confirmez seulement si les deux correspondent.",
-            "J’ai comparé, faire confiance", danger: false, code: scan.Value.Fingerprint)) return;
-        Directory.CreateDirectory(ConnectionSettings.DirectoryPath);
-        await File.AppendAllTextAsync(ConnectionSettings.KnownHostsPath, scan.Value.KeyLine);
-        RefreshTrustChip();
-        Toast("Empreinte enregistrée sur ce PC. Vous pouvez enregistrer la connexion.");
+        await RunAsync("Lecture de l’empreinte publique du serveur…", async () =>
+        {
+            var form = ReadForm().Snapshot();
+            var scan = await SshTransport.ScanFingerprintAsync(form);
+            if (!await ConfirmAsync("Vérifier l’identité SSH", $"Serveur {form.Host}:{form.Port}. Comparez cette empreinte à celle de la console de l’hébergeur : sa lecture sur le réseau ne prouve pas l’identité du serveur. Confirmez seulement si les deux correspondent.",
+                "J’ai comparé, faire confiance", danger: false, code: scan.Fingerprint) || closed) return;
+            if (ReadForm() != form) throw new InvalidOperationException("Les réglages ont changé. Vérifiez à nouveau l’empreinte de cette connexion.");
+            KnownHostsTrust.SaveTrustedKey(form, scan.KeyLine);
+            RefreshTrustChip();
+            Toast("Empreinte enregistrée sur ce PC. Vous pouvez enregistrer la connexion.");
+        });
     }
 }
 
-internal sealed class BackupItem(string name, long size, string modifiedUtc)
+internal sealed class BackupItem(string name, long size, string modifiedUtc, ConnectionSettings? origin = null)
 {
+    public ConnectionSettings? Origin { get; } = origin;
     public string Name { get; } = name;
     public long Size { get; } = size;
     public bool Latest { get; set; }
@@ -735,7 +921,7 @@ internal sealed record RoomItem(string Name, bool Private, int Count, int Capaci
     public string Visibility => Private ? "Privé" : "Public";
     public Brush BadgeBackground => Motion.Hex(Private ? "#2A2550" : "#163A35");
     public Brush BadgeForeground => Motion.Hex(Private ? "#B3A8FF" : "#3DDC97");
-    public string Occupancy => $"{Count} / {Capacity} joueurs" + (Count >= Capacity ? " · complet" : "");
+    public string Occupancy => Capacity > 0 ? $"{Count} / {Capacity} joueurs" + (Count >= Capacity ? " · complet" : "") : $"{Count} joueurs · capacité inconnue";
     public GridLength FillStar => new(Math.Clamp(Count, 0, Math.Max(1, Capacity)), GridUnitType.Star);
     public GridLength RestStar => new(Math.Max(0, Capacity - Count), GridUnitType.Star);
 }

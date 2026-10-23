@@ -10,8 +10,9 @@ public partial class App : Application
         base.OnStartup(e);
         if (e.Args.Contains("--self-test"))
         {
-            try { SelfTests.Run(); Shutdown(0); }
-            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Shutdown(1); }
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            try { SelfTests.Run(); await PanelUiTests.RunAsync(); Shutdown(0); }
+            catch (Exception ex) { Console.Error.WriteLine(ex.ToString()); Shutdown(1); }
             return;
         }
         int checkIndex = Array.IndexOf(e.Args, "--check-connection");

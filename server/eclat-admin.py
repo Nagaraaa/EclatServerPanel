@@ -67,9 +67,9 @@ class Admin:
         return result.stdout.strip()
 
     def service_state(self):
-        raw = self.command('/usr/bin/systemctl', 'show', self.service, '--property=ActiveState,SubState,MainPID', check=False)
+        raw = self.command('/usr/bin/systemctl', 'show', self.service, '--property=ActiveState,SubState,MainPID,ControlGroup', check=False)
         fields = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
-        return {'active': fields.get('ActiveState', 'unknown'), 'sub': fields.get('SubState', 'unknown'), 'pid': int(fields.get('MainPID', '0') or 0)}
+        return {'active': fields.get('ActiveState', 'unknown'), 'sub': fields.get('SubState', 'unknown'), 'pid': int(fields.get('MainPID', '0') or 0), 'controlGroup': fields.get('ControlGroup', '')}
 
     def protocol(self):
         started = time.monotonic()
@@ -102,14 +102,49 @@ class Admin:
         disk = shutil.disk_usage(self.data)
         return {'memoryTotalBytes': memory.get('MemTotal', 0), 'memoryAvailableBytes': memory.get('MemAvailable', 0), 'diskTotalBytes': disk.total, 'diskFreeBytes': disk.free, 'load': list(os.getloadavg())}
 
-    def monitor(self):
-        path = self.data / 'monitor.json'
-        if not path.is_file():
-            return {}
-        if path.stat().st_size > 2 * 1024 * 1024:
-            return {'error': 'Monitor file too large'}
+    @staticmethod
+    def monitor_process_current(monitor, service):
+        # MainPID may be a supervisor: the game's Node child must belong to the
+        # same service, rather than have the supervisor's exact PID.
+        pid = monitor.get('pid')
+        group = service.get('controlGroup') if isinstance(service, dict) else None
+        if (type(pid) is not int or pid <= 0 or not isinstance(group, str)
+                or not group.startswith('/') or group.rstrip('/') == ''
+                or service.get('active') != 'active'):
+            return False
+        group = group.rstrip('/')
         try:
-            return redact(json.loads(path.read_text(encoding='utf-8')))
+            lines = Path(f'/proc/{pid}/cgroup').read_text(encoding='utf-8').splitlines()
+        except (OSError, ValueError):
+            return False
+        for line in lines:
+            fields = line.split(':', 2)
+            if len(fields) != 3:
+                continue
+            hierarchy, controllers, membership = fields
+            if not ((hierarchy == '0' and controllers == '') or 'name=systemd' in controllers.split(',')):
+                continue
+            if membership == group or membership.startswith(group + '/'):
+                return True
+        return False
+
+    def monitor(self, service=None):
+        path = self.data / 'monitor.json'
+        try:
+            if not path.is_file():
+                return {}
+            if path.stat().st_size > 2 * 1024 * 1024:
+                return {'error': 'Monitor file too large'}
+            snapshot = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(snapshot, dict):
+                return {'error': 'Monitor unavailable'}
+            if service is None:
+                try:
+                    service = self.service_state()
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    service = {}
+            snapshot['processCurrent'] = self.monitor_process_current(snapshot, service)
+            return redact(snapshot)
         except (OSError, ValueError):
             return {'error': 'Monitor unavailable'}
 
@@ -123,7 +158,8 @@ class Admin:
                 network = redact(json.loads(path.read_text(encoding='utf-8')))
         except (OSError, ValueError):
             pass
-        return {'service': self.service_state(), 'protocol': self.protocol(), 'monitor': self.monitor(), 'network': network, 'metrics': self.metrics(), 'host': {'name': socket.gethostname(), 'uptimeSeconds': int(uptime), 'nodeVersion': self.command('/usr/local/bin/node', '--version', check=False)}}
+        service = self.service_state()
+        return {'service': service, 'protocol': self.protocol(), 'monitor': self.monitor(service), 'network': network, 'metrics': self.metrics(), 'host': {'name': socket.gethostname(), 'uptimeSeconds': int(uptime), 'nodeVersion': self.command('/usr/local/bin/node', '--version', check=False)}}
 
     def logs(self):
         text = self.command('/usr/bin/journalctl', '-u', self.service, '--no-pager', '-o', 'short-iso', '-n', '200', '--since', '2 hours ago')
@@ -211,7 +247,8 @@ class Admin:
     def backups(self):
         self.ensure_backup_dir()
         paths = [path for path in self.backup_dir.iterdir() if SNAPSHOT_NAME.fullmatch(path.name) and path.is_file() and not path.is_symlink()]
-        return {'items': [self.backup_info(path) for path in sorted(paths, key=lambda item: item.name, reverse=True)]}
+        # The suffix is random: names from the same second do not encode creation order.
+        return {'items': [self.backup_info(path) for path in sorted(paths, key=lambda item: (item.stat().st_mtime_ns, item.name), reverse=True)]}
 
     def snapshot_database(self, path):
         with tarfile.open(path, 'r:gz') as archive:

@@ -21,7 +21,7 @@ L’interface sombre suit l’état du serveur en direct : orbe d’état qui pu
 | Action | Fonctionnement |
 | --- | --- |
 | Vérifier l’état | État du service et échange `hello` / `ping` avec le jeu. Un processus actif ne suffit pas à déclarer le jeu disponible. |
-| Voir l’activité | Joueurs et salons remontés par le serveur. |
+| Voir l’activité | Joueurs et salons remontés par le serveur, avec la capacité de chaque salon, jusqu’à dix joueurs. Une activité absente ou ancienne est indiquée comme non confirmée. |
 | Contrôler le service | Démarrer, arrêter ou redémarrer le service du jeu. |
 | Lire les journaux | Dernières lignes du service, avec masquage des valeurs sensibles reconnues. |
 | Suivre les ressources | Mémoire, charge et espace disque du VPS. |
@@ -29,6 +29,12 @@ L’interface sombre suit l’état du serveur en direct : orbe d’état qui pu
 | Restaurer | Choisir une sauvegarde, confirmer la restauration et conserver une copie de la base précédente. |
 
 Le dépôt contient le panel et son outil d’administration Linux. Il ne contient ni ROM, ni sprites, ni code du serveur de jeu, ni données de joueurs. La distribution du serveur se fournit séparément.
+
+L’état est contrôlé toutes les vingt secondes, quelle que soit la page ouverte. Les courbes conservent les dernières mesures de la session ; elles repartent de zéro si la connexion change. Les journaux se chargent à l’ouverture de leur page ou sur actualisation.
+
+La latence affichée mesure l’échange de contrôle effectué **localement sur le VPS**. Elle ne représente pas le ping des joueurs. L’annuaire et le tunnel reflètent leur dernier état déclaré par le serveur.
+
+Les commandes sont exécutées l’une après l’autre, y compris pendant une confirmation. Après un démarrage, un arrêt, un redémarrage ou une restauration, le panel relit l’état du serveur. Une commande qui expire n’est jamais répétée automatiquement : le résultat peut être incertain et doit être contrôlé avant une nouvelle tentative.
 
 ## Prérequis
 
@@ -87,7 +93,7 @@ Le [guide de migration](docs/migration.md) décrit la bascule depuis un ancien h
 
 ## Validation
 
-Le dépôt prévoit une compilation Windows et des vérifications automatisées dans [GitHub Actions](.github/workflows/build.yml). Ces vérifications couvrent le code du panel et de l’outil d’administration ; elles ne prouvent pas qu’un VPS donné est disponible ou qu’une partie coop fonctionne.
+Le dépôt prévoit une compilation Windows et des vérifications automatisées dans [GitHub Actions](.github/workflows/build.yml). Les tests du panel couvrent les réponses invalides, les empreintes SSH, l’intégrité des téléchargements et les parcours de l’interface avec un serveur simulé : changement de page pendant un contrôle, confirmations, erreur de connexion et changement d’hôte. Les tests Linux vérifient notamment les sauvegardes SQLite et la restauration dans un dossier temporaire. Ils ne prouvent pas qu’un VPS donné est disponible ou qu’une partie coop fonctionne.
 
 Vérifications du panel sous Windows :
 

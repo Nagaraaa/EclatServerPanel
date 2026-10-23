@@ -11,7 +11,7 @@ import sqlite3
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 SPEC = importlib.util.spec_from_file_location('admin', Path(__file__).resolve().parents[1] / 'server/eclat-admin.py')
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -50,6 +50,92 @@ class TestAdmin(unittest.TestCase):
         with database(self.db) as connection:
             return connection.execute('SELECT name,eclats FROM players ORDER BY id').fetchall()
 
+    def test_service_state_includes_current_control_group(self):
+        with patch.object(self.admin, 'command', return_value='ActiveState=active\nSubState=running\nMainPID=23846\nControlGroup=/system.slice/eclat-server.service') as command:
+            state = self.admin.service_state()
+        self.assertEqual(state, {'active': 'active', 'sub': 'running', 'pid': 23846, 'controlGroup': '/system.slice/eclat-server.service'})
+        self.assertIn('ControlGroup', command.call_args.args[3])
+
+    def test_monitor_accepts_live_node_child_of_supervisor_in_service_group(self):
+        service = {'active': 'active', 'pid': 23846, 'controlGroup': '/system.slice/eclat-server.service'}
+        snapshot = {'pid': 23871, 'status': 'running', 'players': [{'name': 'Alice'}]}
+        source = self.data / 'monitor.json'
+        source.write_text(json.dumps(snapshot))
+        read_text = Path.read_text
+        for membership in ('0::/system.slice/eclat-server.service\n',
+                           '0::/system.slice/eclat-server.service/worker\n',
+                           '4:memory:/other\n1:name=systemd:/system.slice/eclat-server.service\n'):
+            with self.subTest(membership=membership):
+                def read_fixture(path, *args, **kwargs):
+                    return membership if path == Path('/proc/23871/cgroup') else read_text(path, *args, **kwargs)
+                with patch.object(Path, 'read_text', read_fixture), patch.object(self.admin, 'service_state') as query:
+                    result = self.admin.monitor(service)
+                self.assertIs(result.pop('processCurrent'), True)
+                self.assertEqual(result, snapshot)
+                query.assert_not_called()
+
+    def test_monitor_rejects_invalid_pids_without_reading_proc(self):
+        service = {'active': 'active', 'controlGroup': '/system.slice/eclat-server.service'}
+        for pid in (None, 0, -1, True, 1.5, '23871', [], {}):
+            with self.subTest(pid=pid), patch.object(Path, 'read_text') as read:
+                self.assertIs(self.admin.monitor_process_current({'pid': pid}, service), False)
+                read.assert_not_called()
+
+    def test_monitor_rejects_other_groups_and_prefix_collisions(self):
+        service = {'active': 'active', 'controlGroup': '/system.slice/eclat-server.service'}
+        for membership in ('0::/system.slice/other.service\n',
+                           '0::/system.slice/eclat-server.service-old\n',
+                           '4:memory:/system.slice/eclat-server.service\n1:name=systemd:/other\n',
+                           'not a cgroup record\n', ''):
+            with self.subTest(membership=membership), patch.object(Path, 'read_text', return_value=membership):
+                self.assertIs(self.admin.monitor_process_current({'pid': 23871}, service), False)
+
+    def test_monitor_dead_or_unreadable_process_is_not_current(self):
+        service = {'active': 'active', 'controlGroup': '/system.slice/eclat-server.service'}
+        for error in (FileNotFoundError('process exited'), PermissionError('proc denied'),
+                      UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid data')):
+            with self.subTest(error=type(error).__name__), patch.object(Path, 'read_text', side_effect=error):
+                self.assertIs(self.admin.monitor_process_current({'pid': 23871}, service), False)
+
+    def test_monitor_cannot_confirm_inactive_or_unknown_unit(self):
+        for service in ({'active': 'inactive', 'controlGroup': '/system.slice/eclat-server.service'},
+                        {'active': 'unknown', 'controlGroup': '/system.slice/eclat-server.service'},
+                        {'active': 'active'}, {'active': 'active', 'controlGroup': '/'}, None):
+            with self.subTest(service=service), patch.object(Path, 'read_text') as read:
+                self.assertIs(self.admin.monitor_process_current({'pid': 23871}, service), False)
+                read.assert_not_called()
+
+    def test_monitor_does_not_trust_stored_process_flag_when_unit_read_fails(self):
+        (self.data / 'monitor.json').write_text(json.dumps({'pid': 23871, 'processCurrent': True}))
+        for error in (OSError('systemctl unavailable'), MODULE.subprocess.TimeoutExpired('systemctl', 15)):
+            with self.subTest(error=type(error).__name__), patch.object(self.admin, 'service_state', side_effect=error):
+                self.assertIs(self.admin.monitor()['processCurrent'], False)
+
+    def test_missing_invalid_or_unreadable_monitor_stays_unknown(self):
+        self.assertEqual(self.admin.monitor({'active': 'active'}), {})
+        source = self.data / 'monitor.json'
+        for content in ('not JSON', 'null', '[]'):
+            with self.subTest(content=content):
+                source.write_text(content)
+                self.assertEqual(self.admin.monitor({'active': 'active'}), {'error': 'Monitor unavailable'})
+        source.write_text('{}')
+        with patch.object(Path, 'read_text', side_effect=PermissionError('monitor denied')):
+            self.assertEqual(self.admin.monitor({'active': 'active'}), {'error': 'Monitor unavailable'})
+
+    def test_status_reuses_one_unit_snapshot_for_monitor(self):
+        service = {'active': 'active', 'pid': 23846, 'controlGroup': '/system.slice/eclat-server.service'}
+        with patch('builtins.open', mock_open(read_data='1000.00 1000.00')), \
+                patch.object(self.admin, 'service_state', return_value=service) as query, \
+                patch.object(self.admin, 'monitor', return_value={'processCurrent': False}) as monitor, \
+                patch.object(self.admin, 'protocol', return_value={'ok': True}), \
+                patch.object(self.admin, 'metrics', return_value={}), \
+                patch.object(self.admin, 'command', return_value='v24.14.0'):
+            result = self.admin.status()
+        query.assert_called_once_with()
+        monitor.assert_called_once_with(service)
+        self.assertEqual(result['service'], service)
+        self.assertIs(result['monitor']['processCurrent'], False)
+
     def test_rejects_unknown_actions_and_fields(self):
         for payload in ({'action': 'shell'}, {'action': 'start', 'command': 'id'}, {'action': ['status']}, {}, [], None):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
@@ -82,6 +168,18 @@ class TestAdmin(unittest.TestCase):
         self.assertTrue(raw.startswith(b'SQLite format 3\x00'))
         self.assertNotIn(b'private-test-secret', raw)
         self.assertEqual(download['sha256'], hashlib.sha256(raw).hexdigest())
+
+    def test_latest_backup_uses_modification_time_instead_of_random_name_suffix(self):
+        self.admin.ensure_backup_dir()
+        older = self.backups / 'eclat-20261023T120000Z-ffffffff.tar.gz'
+        newer = self.backups / 'eclat-20261023T120000Z-00000000.tar.gz'
+        older.write_bytes(b'older archive fixture')
+        newer.write_bytes(b'newer archive fixture')
+        # Both names have the same second, and lexical order would choose the older archive.
+        timestamp = 1792756800 * 1_000_000_000
+        os.utime(older, ns=(timestamp, timestamp))
+        os.utime(newer, ns=(timestamp + 100_000_000, timestamp + 100_000_000))
+        self.assertEqual([item['name'] for item in self.admin.backups()['items']], [newer.name, older.name])
 
     def test_restore_preserves_rows_and_current_server_identity(self):
         snapshot = self.admin.backup()

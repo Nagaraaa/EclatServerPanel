@@ -18,6 +18,8 @@ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 
 Comparer la valeur SHA-256 complète. Une collecte par `ssh-keyscan` montre la clé présentée sur le réseau ; elle ne l’authentifie pas. Le panel utilise ensuite `StrictHostKeyChecking=yes`.
 
+La confiance est associée à l’adresse et au port SSH. L’indicateur de connexion vérifie cette entrée précise, même si le fichier contient déjà des empreintes pour d’autres serveurs. Une nouvelle validation remplace uniquement les entrées de la connexion confirmée.
+
 Si la clé change après une réinstallation, vérifier la nouvelle empreinte dans la console avant de remplacer celle enregistrée. Ne pas supprimer l’ancienne empreinte pour contourner un avertissement inexpliqué.
 
 ## Ce qui reste privé
