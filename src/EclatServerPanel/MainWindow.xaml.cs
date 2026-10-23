@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     static readonly string[] AvatarColors = ["#5EE6FF", "#8B7BFF", "#3DDC97", "#FFB547", "#FF8EA3", "#7FB2FF"];
     private readonly IPanelTransport transport;
     private readonly bool demo;
+    private readonly bool isolatedSettings;
     private ConnectionSettings settings;
     private bool busy;
     private bool closed, lastCheckFailed;
@@ -31,14 +32,10 @@ public partial class MainWindow : Window
     private string currentPage = "Overview";
     private readonly Dictionary<string, FrameworkElement> pages;
     private readonly Dictionary<string, RadioButton> navigation;
-    private readonly Dictionary<string, (string Title, string Subtitle)> headings = new()
+    private readonly Dictionary<string, string> headings = new()
     {
-        ["Overview"] = ("Vue d’ensemble", "État du jeu, activité et ressources du VPS en direct."),
-        ["Sessions"] = ("Joueurs et salons", "Qui joue, et dans quel salon, d’après le serveur."),
-        ["Logs"] = ("Journaux", "Dernières lignes du service, valeurs sensibles masquées."),
-        ["Backups"] = ("Sauvegardes", "Instantanés cohérents de la base SQLite."),
-        ["Diagnostics"] = ("Diagnostic", "Service, machine, réseau et journal en un coup d’œil."),
-        ["Connection"] = ("Connexion", "Accès SSH au VPS, enregistré uniquement sur ce PC."),
+        ["Overview"] = "Vue d’ensemble", ["Sessions"] = "Joueurs et salons",
+        ["Logs"] = "Journaux", ["Backups"] = "Sauvegardes", ["Diagnostics"] = "Diagnostic", ["Connection"] = "Connexion",
     };
     private readonly Queue<double> playersHistory = new(), roomsHistory = new(), latencyHistory = new(), loadHistory = new();
     private List<LogLine> logLines = [];
@@ -53,10 +50,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         this.demo = demo;
+        isolatedSettings = injectedSettings is not null;
         transport = injectedTransport ?? (demo ? new DemoTransport() : new SshTransport());
         settings = injectedSettings ?? (demo ? new ConnectionSettings { Host = "serveur.example", User = "eclat-panel", Port = 22, KeyPath = "Clé locale — démonstration" } : ConnectionSettings.Load());
         pages = new() { ["Overview"] = OverviewPage, ["Sessions"] = SessionsPage, ["Logs"] = LogsPage, ["Backups"] = BackupsPage, ["Diagnostics"] = DiagnosticsPage, ["Connection"] = ConnectionPage };
         navigation = new() { ["Overview"] = NavOverview, ["Sessions"] = NavSessions, ["Logs"] = NavLogs, ["Backups"] = NavBackups, ["Diagnostics"] = NavDiagnostics, ["Connection"] = NavConnection };
+        ReloadConnections();
         HostBox.Text = settings.Host;
         UserBox.Text = settings.User;
         PortBox.Text = settings.Port.ToString();
@@ -133,7 +132,7 @@ public partial class MainWindow : Window
         currentPage = name;
         foreach (var page in pages) page.Value.Visibility = page.Key == name ? Visibility.Visible : Visibility.Collapsed;
         Motion.Enter(pages[name]);
-        (PageTitle.Text, PageSubtitle.Text) = headings[name];
+        PageTitle.Text = headings[name];
         Motion.Enter(PageTitle, 6, 220);
         MovePill(navigation[name]);
     }
@@ -556,7 +555,7 @@ public partial class MainWindow : Window
         return result;
     }
 
-    private static List<RoomItem> RoomItems(JsonElement rooms, JsonElement players)
+    private List<RoomItem> RoomItems(JsonElement rooms, JsonElement players)
     {
         var members = new Dictionary<string, List<string>>();
         if (players.ValueKind == JsonValueKind.Array)
@@ -572,7 +571,7 @@ public partial class MainWindow : Window
             var count = Get(room, "count").ValueKind == JsonValueKind.Number ? Get(room, "count").GetInt32() : names.Count;
             var capacity = Get(room, "capacity").ValueKind == JsonValueKind.Number ? Get(room, "capacity").GetInt32() : 0;
             var isPrivate = First(room, "visibility") == "private";
-            result.Add(new(name, isPrivate, count, capacity, names.Count > 0 ? string.Join(", ", names) : "Membres non communiqués"));
+            result.Add(new(name, isPrivate, count, capacity, names.Count > 0 ? string.Join(", ", names) : "Membres non communiqués") { Id = id, Origin = ActiveSettings.Snapshot() });
         }
         return result;
     }
@@ -855,7 +854,7 @@ public partial class MainWindow : Window
         bool saved = false;
         await RunAsync("Enregistrement des réglages locaux…", () =>
         {
-            var next = ReadForm(); next.Save(); ApplyConnection(next);
+            var next = ReadForm(); next.Save(); ApplyConnection(next); ReloadConnections();
             saved = true;
             return Task.CompletedTask;
         });
@@ -872,6 +871,35 @@ public partial class MainWindow : Window
         EndpointText.Text = $"{settings.User}@{settings.Host}";
         ResetConnectionData(); RefreshTrustChip();
     }
+
+    private void ReloadConnections()
+    {
+        SavedConnections.ItemsSource = demo || isolatedSettings ? new[] { settings } : ConnectionSettings.LoadProfiles();
+        SavedConnections.SelectedItem = ((IEnumerable<ConnectionSettings>)SavedConnections.ItemsSource).FirstOrDefault(p => p == settings);
+    }
+
+    private void SavedConnection_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (SavedConnections.SelectedItem is not ConnectionSettings selected || pages is null) return;
+        HostBox.Text = selected.Host; UserBox.Text = selected.User;
+        PortBox.Text = selected.Port.ToString(); KeyBox.Text = selected.KeyPath;
+        ApplyConnection(selected);
+    }
+
+    private async void CloseRoom_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not RoomItem room) return;
+        await CloseRoomAsync(room);
+    }
+
+    internal Task CloseRoomAsync(RoomItem room) => RunAsync("Fermeture du salon…", async () =>
+        {
+            if (room.Origin != ActiveSettings) throw new InvalidOperationException("La connexion a changé. Actualisez la liste des salons.");
+            if (!await ConfirmAsync("Fermer ce salon ?", $"{room.Name} : les {room.Count} joueur(s) seront déconnectés de la coop. Le salon sera supprimé.", "Fermer le salon", danger: true) || closed) return;
+            await transport.SendAsync(ActiveSettings, "close-room", room.Id);
+            RenderStatus(await transport.SendAsync(ActiveSettings, "status"));
+            Toast("Salon fermé.");
+        });
 
     private async void Trust_Click(object sender, RoutedEventArgs e)
     {
@@ -918,6 +946,8 @@ internal sealed record PlayerItem(string Name, string Room, Brush Avatar)
 
 internal sealed record RoomItem(string Name, bool Private, int Count, int Capacity, string Members)
 {
+    public string Id { get; init; } = "";
+    public ConnectionSettings? Origin { get; init; }
     public string Visibility => Private ? "Privé" : "Public";
     public Brush BadgeBackground => Motion.Hex(Private ? "#2A2550" : "#163A35");
     public Brush BadgeForeground => Motion.Hex(Private ? "#B3A8FF" : "#3DDC97");

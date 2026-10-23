@@ -76,6 +76,14 @@ public partial class App : Application
                 {
                     await window.ShowPageForCaptureAsync(page);
                     Capture(window, Path.Combine(directory, page.ToLowerInvariant() + ".png"));
+                    if (page is "Sessions" or "Diagnostics")
+                    {
+                        var toggle = (System.Windows.Controls.Primitives.ToggleButton)window.FindName(page == "Sessions" ? "RawSessionsToggle" : "RawDiagnosticsToggle");
+                        toggle.IsChecked = true; await Task.Delay(350);
+                        Capture(window, Path.Combine(directory, page.ToLowerInvariant() + "-raw.png"));
+                        toggle.IsChecked = false;
+                    }
+
                 }
                 await window.ShowRestoreDialogForCaptureAsync();
                 Capture(window, Path.Combine(directory, "restore-dialog.png"));

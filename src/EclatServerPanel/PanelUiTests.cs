@@ -14,6 +14,10 @@ internal static class PanelUiTests
     internal static async Task RunAsync()
     {
         Check(Application.Current is not null && Application.Current.Dispatcher.CheckAccess(), "UI tests require the WPF dispatcher.");
+        ProfilePersistence();
+        await SavedConnectionSelectionAsync();
+        await RawSwitchesAsync();
+        await RoomClosureAsync();
         await MonitorAndNetworkAsync();
         await FailedRefreshAsync();
         await QueuedNavigationAsync();
@@ -22,6 +26,90 @@ internal static class PanelUiTests
         await RestartFreshnessAsync();
         await RestoreConfirmationAsync();
         await ConnectionResetAsync();
+    }
+
+    private static void ProfilePersistence()
+    {
+        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "eclat-profiles-" + Guid.NewGuid());
+        System.IO.Directory.CreateDirectory(directory);
+        try
+        {
+            var key = System.IO.Path.Combine(directory, "synthetic-key"); System.IO.File.WriteAllText(key, "synthetic fixture");
+            var path = System.IO.Path.Combine(directory, "connection.json");
+            var profiles = System.IO.Path.Combine(directory, "connections.json");
+            var first = new ConnectionSettings { Host = "one.invalid", KeyPath = key };
+            System.IO.File.WriteAllText(path, JsonSerializer.Serialize(first));
+            var second = first with { Host = "two.invalid" }; second.Save(path, profiles);
+            var loaded = ConnectionSettings.LoadProfiles(profiles, ConnectionSettings.Load(path));
+            Check(loaded.Count == 2 && loaded.Contains(first) && loaded.Contains(second), "Saving another server must retain the legacy connection.");
+            var updated = second with { KeyPath = key + "2" }; System.IO.File.WriteAllText(updated.KeyPath, "synthetic fixture"); updated.Save(path, profiles);
+            loaded = ConnectionSettings.LoadProfiles(profiles, ConnectionSettings.Load(path));
+            Check(loaded.Count == 2 && loaded.Contains(updated) && !loaded.Contains(second), "Saving an existing endpoint must update its profile without duplicates.");
+            Check(ConnectionSettings.Load(path) == updated, "The last saved connection must survive restart.");
+        }
+        finally { System.IO.Directory.Delete(directory, true); }
+    }
+
+    private static async Task SavedConnectionSelectionAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        var picker = Find<ComboBox>(test.Window, "SavedConnections");
+        var other = test.Settings with { Host = "second.invalid", User = "second", Port = 2222, KeyPath = "synthetic-second" };
+        picker.ItemsSource = new[] { test.Settings, other };
+        picker.SelectedItem = other;
+        Check(Text(test.Window, "HostBox") == other.Host && Text(test.Window, "PortBox") == "2222" && Text(test.Window, "KeyBox") == other.KeyPath, "Selecting a saved connection must populate its form.");
+        Find<RadioButton>(test.Window, "NavConnection").IsChecked = true;
+        await test.Window.Dispatcher.InvokeAsync(() => test.Window.UpdateLayout(), DispatcherPriority.ApplicationIdle);
+        picker.ApplyTemplate(); picker.IsDropDownOpen = true;
+        await Task.Delay(100);
+        Check(picker.IsDropDownOpen, "The saved connection menu must open.");
+        picker.IsDropDownOpen = false;
+    }
+
+    private static async Task RawSwitchesAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        foreach (var prefix in new[] { "RawSessions", "RawDiagnostics" })
+        {
+            var toggle = Find<System.Windows.Controls.Primitives.ToggleButton>(test.Window, prefix + "Toggle");
+            toggle.ApplyTemplate();
+            for (var index = 0; index < 4; index++)
+            {
+                toggle.IsChecked = true;
+                await Task.Delay(180);
+                Check(Find<FrameworkElement>(test.Window, prefix + "Box").Visibility == Visibility.Visible, "Raw data must open.");
+                toggle.IsChecked = false;
+                await Task.Delay(180);
+                Check(Find<FrameworkElement>(test.Window, prefix + "Box").Visibility == Visibility.Collapsed, "Raw data must close.");
+            }
+        }
+        Check(test.Window.IsVisible, "Switches must not close the panel.");
+    }
+
+    private static async Task RoomClosureAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        await test.Window.RefreshAsync();
+        var rooms = Find<ItemsControl>(test.Window, "RoomCards");
+        Check(rooms.Items.OfType<RoomItem>().All(room => room.Id.Length > 0 && room.Origin == test.Settings), "Room actions must retain the ID and originating connection.");
+        var chosen = rooms.Items.OfType<RoomItem>().First(room => room.Id == "r1");
+        var cancelled = test.Window.CloseRoomAsync(chosen);
+        await DialogAsync(test.Window, "room cancellation");
+        Click(test.Window, "DialogCancel"); await Bounded(cancelled, "cancel room closure");
+        Check(test.Transport.Count("close-room") == 0, "Cancellation must send no room closure.");
+        await DialogClosedAsync(test.Window);
+        var confirmed = test.Window.CloseRoomAsync(chosen);
+        await DialogAsync(test.Window, "room closure");
+        Click(test.Window, "DialogConfirm"); await Bounded(confirmed, "confirmed room closure");
+        Check(test.Transport.Count("close-room") == 1, "Confirmation must send one closure.");
+        Check(rooms.Items.OfType<RoomItem>().All(room => room.Id != chosen.Id), "Closed room must disappear after the status check.");
+        Check(rooms.Items.Count == 1, "Other rooms must remain open.");
+        await DialogClosedAsync(test.Window);
+        test.Window.ApplyConnection(test.Settings with { Host = "other.invalid" });
+        await Bounded(test.Window.CloseRoomAsync(chosen), "stale room origin");
+        Check(test.Transport.Count("close-room") == 1, "Old room actions must not affect a different connection.");
+        try { SshTransport.ValidateRequest("close-room", "../../bad"); throw new Exception("Invalid ID accepted"); }
+        catch (InvalidOperationException) { }
     }
 
     private static async Task MonitorAndNetworkAsync()

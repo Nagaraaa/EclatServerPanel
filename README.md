@@ -22,6 +22,7 @@ L’interface sombre suit l’état du serveur en direct : orbe d’état qui pu
 | --- | --- |
 | Vérifier l’état | État du service et échange `hello` / `ping` avec le jeu. Un processus actif ne suffit pas à déclarer le jeu disponible. |
 | Voir l’activité | Joueurs et salons remontés par le serveur, avec la capacité de chaque salon, jusqu’à dix joueurs. Une activité absente ou ancienne est indiquée comme non confirmée. |
+| Fermer un salon | Confirmation, déconnexion des membres et suppression du salon, sans fermer les autres salons. Requiert le canal local de la branche serveur `codex/admin-close-isolated`. |
 | Contrôler le service | Démarrer, arrêter ou redémarrer le service du jeu. |
 | Lire les journaux | Dernières lignes du service, avec masquage des valeurs sensibles reconnues. |
 | Suivre les ressources | Mémoire, charge et espace disque du VPS. |
@@ -54,6 +55,8 @@ Prendre l'archive Windows dans les [versions publiées](https://github.com/Nagar
 2. Ouvrir le panel et renseigner l’hôte, le port SSH, le compte dédié et le chemin de la clé privée.
 3. Afficher l’empreinte du serveur. La comparer à l’empreinte obtenue dans la console du fournisseur avant de l’accepter.
 4. Tester la connexion et consulter l’état du jeu.
+
+La liste **Connexions enregistrées** permet de sélectionner un accès mémorisé. **Enregistrer et se connecter** conserve aussi les autres profils. L’ancienne connexion est reprise automatiquement. Les profils sont dans `%LOCALAPPDATA%\EclatServerPanel\connections.json`.
 
 Les réglages sont enregistrés dans `%LOCALAPPDATA%\EclatServerPanel\connection.json`. Ils contiennent l’adresse du serveur et le chemin de la clé, jamais son contenu. Les clés d’hôte acceptées sont conservées dans un fichier `known_hosts` du même dossier. Aucun mot de passe root n’est demandé ou enregistré par le panel.
 
@@ -112,3 +115,7 @@ Après toute installation, vérifier séparément l’accès SSH, les réponses 
 ## Licence
 
 Code sous [licence MIT](LICENSE). Les noms de jeux et marques mentionnés restent la propriété de leurs détenteurs. Ce projet ne distribue aucun contenu Nintendo et n’est pas affilié à Nintendo, Game Freak ou The Pokémon Company.
+
+## Version isolée 1.1.2
+
+Cette branche contient uniquement les corrections demandées le 23 octobre : fermeture des salons, switch des données brutes, suppression des sous-titres et profils SSH sélectionnables. Elle reste séparée du chantier d’administration avancée en cours. Le VPS en service n’a pas été remplacé. Voir les [preuves](docs/evidence/admin-controls/README.md).

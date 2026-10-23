@@ -13,6 +13,7 @@ public sealed class DemoTransport : IPanelTransport
     private readonly List<DemoBackup> backups = [];
     private readonly List<string> events = [];
     private bool running = true;
+    private readonly HashSet<string> closedRooms = [];
     private int tick;
     private long totalConnections = 17, totalDisconnections = 14;
     private DateTimeOffset startedAt = DateTimeOffset.UtcNow.AddHours(-26);
@@ -34,6 +35,9 @@ public sealed class DemoTransport : IPanelTransport
             switch (action)
             {
                 case "status": data = Status(); break;
+                case "close-room":
+                    if (name is not ("r1" or "r2") || !closedRooms.Add(name)) throw new InvalidOperationException("Salon introuvable.");
+                    data = new { closed = true, roomId = name }; break;
                 case "diagnostics": data = new { status = Status(), journal = Journal(), backupCount = backups.Count }; break;
                 case "logs": data = new { text = Journal() }; break;
                 case "backups": data = new { items = backups.Select(BackupInfo).ToArray() }; break;
@@ -74,6 +78,8 @@ public sealed class DemoTransport : IPanelTransport
             players.Add(new { id = "p3", name = "Lou", roomId = "r2" });
         }
         var rooms = running ? new object[] { new { id = "r1", name = "Prairie", visibility = "public", count = 2, capacity = MaxPlayers }, new { id = "r2", name = "Forêt de Jade", visibility = "private", count = 1, capacity = MaxPlayers } } : [];
+        players = players.Where(p => !closedRooms.Contains(JsonSerializer.SerializeToElement(p).GetProperty("roomId").GetString()!)).ToList();
+        rooms = rooms.Where(r => !closedRooms.Contains(JsonSerializer.SerializeToElement(r).GetProperty("id").GetString()!)).ToArray();
         var now = DateTimeOffset.UtcNow.ToString("O");
         return new
         {

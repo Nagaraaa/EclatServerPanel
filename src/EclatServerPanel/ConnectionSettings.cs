@@ -18,24 +18,51 @@ public sealed record ConnectionSettings
     public static string DirectoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EclatServerPanel");
     public static string SettingsPath => Path.Combine(DirectoryPath, "connection.json");
     public static string KnownHostsPath => Path.Combine(DirectoryPath, "known_hosts");
-    public static ConnectionSettings Load()
+    public static string ProfilesPath => Path.Combine(DirectoryPath, "connections.json");
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Label => $"{User}@{Host}:{Port}";
+    public static IReadOnlyList<ConnectionSettings> LoadProfiles() => LoadProfiles(ProfilesPath, Load());
+    internal static IReadOnlyList<ConnectionSettings> LoadProfiles(string profilesPath, ConnectionSettings current)
+    {
+        var profiles = new List<ConnectionSettings>();
+        try
+        {
+            if (File.Exists(profilesPath) && new FileInfo(profilesPath).Length <= 262144)
+                profiles.AddRange(JsonSerializer.Deserialize<List<ConnectionSettings>>(File.ReadAllText(profilesPath)) ?? []);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        if (!string.IsNullOrWhiteSpace(current.Host) && !profiles.Any(p => p.EndpointIdentity == current.EndpointIdentity && p.User == current.User)) profiles.Add(current);
+        return profiles.Where(p => !string.IsNullOrWhiteSpace(p.Host)).Take(100).ToArray();
+    }
+    public static ConnectionSettings Load() => Load(SettingsPath);
+    internal static ConnectionSettings Load(string settingsPath)
     {
         try
         {
-            if (new FileInfo(SettingsPath).Length > 16384) return new();
-            return JsonSerializer.Deserialize<ConnectionSettings>(File.ReadAllText(SettingsPath)) ?? new();
+            if (new FileInfo(settingsPath).Length > 16384) return new();
+            return JsonSerializer.Deserialize<ConnectionSettings>(File.ReadAllText(settingsPath)) ?? new();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return new(); }
     }
-    public void Save()
+    public void Save() => Save(SettingsPath, ProfilesPath);
+    internal void Save(string settingsPath, string profilesPath)
     {
         Validate();
-        Directory.CreateDirectory(DirectoryPath);
-        var temp = SettingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var previousProfiles = LoadProfiles(profilesPath, Load(settingsPath));
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        var temp = settingsPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
-            File.Move(temp, SettingsPath, true);
+            File.Move(temp, settingsPath, true);
+            var profiles = previousProfiles.Where(p => p.EndpointIdentity != EndpointIdentity || p.User != User).Append(this).TakeLast(100).ToArray();
+            var profilesTemp = profilesPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(profilesTemp, JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true }));
+                File.Move(profilesTemp, profilesPath, true);
+            }
+            finally { if (File.Exists(profilesTemp)) File.Delete(profilesTemp); }
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }

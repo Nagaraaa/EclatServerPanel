@@ -119,7 +119,7 @@
         <StackPanel>
           <TextBlock x:Name="PageOverline" Text="SERVEUR ÉCLAT" Style="{StaticResource Overline}" Foreground="{StaticResource Cyan}"/>
           <TextBlock x:Name="PageTitle" Text="Vue d’ensemble" FontSize="30" FontWeight="SemiBold"/>
-          <TextBlock x:Name="PageSubtitle" Style="{StaticResource Hint}" FontSize="13" Margin="0,4,0,0"/>
+
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock x:Name="ActivityText" Text="Prêt" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,16,0" TextWrapping="NoWrap"/>
@@ -270,7 +270,7 @@
                             <Border Height="6" CornerRadius="3" Background="#222D58"/>
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="{Binding FillStar}"/><ColumnDefinition Width="{Binding RestStar}"/></Grid.ColumnDefinitions><Border Height="6" CornerRadius="3" Background="{StaticResource Crystal}"/></Grid>
                           </Grid>
-                          <TextBlock Text="{Binding Occupancy}" Style="{StaticResource Hint}" FontSize="12" Margin="0,8,0,0"/>
+                          <TextBlock Text="{Binding Occupancy}" Style="{StaticResource Hint}" FontSize="12" Margin="0,8,0,0"/><Button Content="Fermer le salon…" Click="CloseRoom_Click" Style="{StaticResource DangerButton}" Margin="0,14,0,0" HorizontalAlignment="Left"/>
                         </StackPanel>
                       </Border>
                     </DataTemplate>
@@ -420,12 +420,13 @@
           <Grid Margin="0,0,6,8">
             <Grid.ColumnDefinitions><ColumnDefinition MaxWidth="760"/><ColumnDefinition Width="22"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions>
             <StackPanel>
+              <TextBlock Text="CONNEXIONS ENREGISTRÉES" Style="{StaticResource Overline}"/><ComboBox Style="{StaticResource ConnectionPicker}" x:Name="SavedConnections" DisplayMemberPath="Label" SelectionChanged="SavedConnection_Changed" Margin="0,0,0,16" MinHeight="36" AutomationProperties.Name="Connexions enregistrées"/>
               <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
                   <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="1" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel Grid.Column="1" Margin="18,4,0,0">
                     <TextBlock Text="Serveur" Style="{StaticResource CardTitle}"/>
-                    <TextBlock Text="Adresse du VPS et compte d’administration dédié." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Border Height="16"/>
                     <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
                       <StackPanel><TextBlock Text="ADRESSE" Style="{StaticResource Overline}"/><TextBox x:Name="HostBox" AutomationProperties.Name="Adresse du serveur"/></StackPanel>
                       <StackPanel Grid.Column="2"><TextBlock Text="PORT SSH" Style="{StaticResource Overline}"/><TextBox x:Name="PortBox" AutomationProperties.Name="Port SSH"/></StackPanel>
@@ -439,7 +440,7 @@
                   <Border Width="32" Height="32" CornerRadius="16" Background="{StaticResource Crystal}" VerticalAlignment="Top"><TextBlock Text="2" Foreground="#0A0F1F" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                   <StackPanel Grid.Column="1" Margin="18,4,0,0">
                     <TextBlock Text="Clé privée" Style="{StaticResource CardTitle}"/>
-                    <TextBlock Text="Seul son chemin est enregistré, jamais son contenu. Une clé chiffrée se charge dans l’agent OpenSSH (ssh-add)." Style="{StaticResource Hint}" Margin="0,4,0,16"/>
+                    <Border Height="16"/>
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="KeyBox" AutomationProperties.Name="Chemin de la clé privée"/><Button Grid.Column="1" Content="Parcourir…" Click="BrowseKey_Click" Margin="10,0,0,0"/></Grid>
                   </StackPanel>
                 </Grid>

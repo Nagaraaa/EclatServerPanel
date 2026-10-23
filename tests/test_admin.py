@@ -11,7 +11,7 @@ import sqlite3
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 SPEC = importlib.util.spec_from_file_location('admin', Path(__file__).resolve().parents[1] / 'server/eclat-admin.py')
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -45,6 +45,25 @@ class TestAdmin(unittest.TestCase):
         (self.data / 'coop-publish.json').write_text(json.dumps({'publishKey': 'private-test-secret'}))
         (self.data / 'server.json').write_text(json.dumps({'name': 'Test game'}))
         self.admin.set_database_owner = lambda path: None
+
+    def test_close_room_checks_identifier_and_confirms_game_reply(self):
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.makefile.return_value.__enter__.return_value = io.BytesIO(b'{"closed":true,"roomId":"synthetic-room"}\n')
+        with patch.object(MODULE.socket, 'socket', return_value=connection):
+            result = self.admin.dispatch({'action': 'close-room', 'name': 'synthetic-room'})
+        self.assertEqual(result, {'closed': True, 'roomId': 'synthetic-room'})
+        sent = json.loads(connection.sendall.call_args.args[0])
+        self.assertEqual(sent, {'action': 'close-room', 'roomId': 'synthetic-room'})
+        with self.assertRaises(ValueError):
+            self.admin.dispatch({'action': 'close-room', 'name': '../escape'})
+
+    def test_close_room_never_claims_success_for_a_different_room(self):
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.makefile.return_value.__enter__.return_value = io.BytesIO(b'{"closed":true,"roomId":"other-room"}\n')
+        with patch.object(MODULE.socket, 'socket', return_value=connection), self.assertRaises(RuntimeError):
+            self.admin.close_room('synthetic-room')
 
     def rows(self):
         with database(self.db) as connection:

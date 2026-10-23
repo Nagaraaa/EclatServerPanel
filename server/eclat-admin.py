@@ -24,7 +24,7 @@ import time
 CONFIG_PATH = Path('/etc/eclat-panel.json')
 MAX_REQUEST = 16384
 MAX_DOWNLOAD = 64 * 1024 * 1024
-ACTIONS = {'status', 'logs', 'start', 'stop', 'restart', 'backup', 'backups', 'download', 'restore', 'diagnostics'}
+ACTIONS = {'close-room', 'status', 'logs', 'start', 'stop', 'restart', 'backup', 'backups', 'download', 'restore', 'diagnostics'}
 SNAPSHOT_NAME = re.compile(r'^eclat-\d{8}T\d{6}Z-[a-f0-9]{8}\.tar\.gz$')
 SECRET_KEY = re.compile(r'(?:password|passwd|secret|token|authorization|credential|private.?key|publish.?key|api.?key|auth.?key|session.?key)', re.I)
 
@@ -361,6 +361,25 @@ class Admin:
             time.sleep(1)
         raise RuntimeError('Restored server did not pass its protocol check; previous database restored')
 
+    def close_room(self, name):
+        if not isinstance(name, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}', name):
+            raise ValueError('Invalid room id')
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(5)
+            try:
+                connection.connect(str(self.data / 'admin.sock'))
+            except OSError:
+                raise RuntimeError('Fermeture indisponible : mettez à jour le serveur de jeu.') from None
+            connection.sendall(json.dumps({'action': 'close-room', 'roomId': name}).encode() + b'\n')
+            with connection.makefile('rb') as stream:
+                raw = stream.readline(4097)
+            if not raw.endswith(b'\n') or len(raw) > 4096:
+                raise RuntimeError('Invalid game administration response')
+            reply = json.loads(raw)
+            if reply.get('closed') is not True or reply.get('roomId') != name:
+                raise RuntimeError(reply.get('error', 'Room closure not confirmed'))
+            return {'closed': True, 'roomId': name}
+
     def dispatch(self, request):
         if not isinstance(request, dict) or set(request) - {'action', 'name'}:
             raise ValueError('Invalid request fields')
@@ -370,6 +389,8 @@ class Admin:
         if action in {'start', 'stop', 'restart'}:
             self.command('/usr/bin/systemctl', action, self.service, timeout=45)
             return {'service': self.service_state()}
+        if action == 'close-room':
+            return self.close_room(request.get('name'))
         if action in {'download', 'restore'}:
             return getattr(self, action)(request.get('name'))
         if action == 'diagnostics':
@@ -422,7 +443,7 @@ def main():
         if len(raw) > MAX_REQUEST:
             raise ValueError('Request too large')
         request = json.loads(raw)
-        if isinstance(request, dict) and request.get('action') in {'start', 'stop', 'restart', 'backup', 'restore'}:
+        if isinstance(request, dict) and request.get('action') in {'start', 'stop', 'restart', 'backup', 'restore', 'close-room'}:
             with operation_lock():
                 result = admin.dispatch(request)
         else:
