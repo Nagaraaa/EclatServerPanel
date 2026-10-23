@@ -234,8 +234,8 @@
         <Trigger Property="IsChecked" Value="True">
           <Setter TargetName="Track" Property="Background" Value="{StaticResource Crystal}"/>
           <Setter TargetName="Knob" Property="Fill" Value="#0A0F1F"/>
-          <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="KnobMove" Storyboard.TargetProperty="X" To="16" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
-          <Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="KnobMove" Storyboard.TargetProperty="X" To="0" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
+          <Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="16" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.EnterActions>
+          <Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.16" EasingFunction="{StaticResource EaseOut}"/></Storyboard></BeginStoryboard></Trigger.ExitActions>
         </Trigger>
       </ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>

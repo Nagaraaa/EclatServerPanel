@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace EclatServerPanel;
 
 /// <summary>In-memory demonstration. It never reads or writes connection credentials or server data.</summary>
-public sealed class DemoTransport : IPanelTransport
+public sealed partial class DemoTransport : IPanelTransport
 {
     internal const int MaxPlayers = 10;
     private readonly object gate = new();
@@ -13,14 +13,16 @@ public sealed class DemoTransport : IPanelTransport
     private readonly List<DemoBackup> backups = [];
     private readonly List<string> events = [];
     private bool running = true;
+    private readonly HashSet<string> closedRooms = [];
     private int tick;
-    private long totalConnections = 17, totalDisconnections = 14;
+    private long totalConnections = 34, totalDisconnections = 14, totalRoomLeaves = 11;
     private DateTimeOffset startedAt = DateTimeOffset.UtcNow.AddHours(-26);
     private int gamePid = 1429;
     private readonly byte[] database = CreateSyntheticDatabase();
 
     public DemoTransport()
     {
+        InitializeAdministration();
         for (int index = 0; index < 3; index++) CreateSnapshot(DateTimeOffset.UtcNow.AddHours(-index * 6 - 1));
         backups.Sort((left, right) => right.Created.CompareTo(left.Created));
     }
@@ -34,6 +36,11 @@ public sealed class DemoTransport : IPanelTransport
             switch (action)
             {
                 case "status": data = Status(); break;
+                case "close-room":
+                    string roomToClose = LegacyRoomId(name!);
+                    int removed = CloseDemoRoom(roomToClose);
+                    AppendAudit(Guid.NewGuid().ToString(), "room.close", roomToClose, null, new { ok = true, closed = true, removedPlayers = removed });
+                    data = new { closed = true, roomId = name }; break;
                 case "diagnostics": data = new { status = Status(), journal = Journal(), backupCount = backups.Count }; break;
                 case "logs": data = new { text = Journal() }; break;
                 case "backups": data = new { items = backups.Select(BackupInfo).ToArray() }; break;
@@ -62,18 +69,12 @@ public sealed class DemoTransport : IPanelTransport
         }
     }
 
-    private object Service() => new { active = running ? "active" : "inactive", sub = running ? "running" : "dead", pid = running ? 1428 : 0 };
+    private object Service() => new { active = running ? "active" : "inactive", sub = running ? "running" : "dead", pid = running ? gamePid : 0 };
     private object Status()
     {
         tick++;
-        var players = new List<object>();
-        if (running)
-        {
-            players.Add(new { id = "p1", name = "Aurore", roomId = "r1" });
-            players.Add(new { id = "p2", name = "Lucas", roomId = "r1" });
-            players.Add(new { id = "p3", name = "Lou", roomId = "r2" });
-        }
-        var rooms = running ? new object[] { new { id = "r1", name = "Prairie", visibility = "public", count = 2, capacity = MaxPlayers }, new { id = "r2", name = "Forêt de Jade", visibility = "private", count = 1, capacity = MaxPlayers } } : [];
+        var players = CurrentPlayers().Select(PlayerMonitor).ToArray();
+        var rooms = running ? DemoRooms().ToArray() : [];
         var now = DateTimeOffset.UtcNow.ToString("O");
         return new
         {
@@ -81,10 +82,10 @@ public sealed class DemoTransport : IPanelTransport
             protocol = new { ok = running, latencyMs = running ? (double?)Math.Round(3.4 + random.NextDouble() * 2.2, 1) : null, error = running ? null : "Service arrêté en démonstration" },
             monitor = new
             {
-                version = 1, pid = gamePid, updatedAt = now, status = running ? "running" : "stopped", uptimeSeconds = running ? Math.Max(0, (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds) : 0,
+                version = 1, pid = running ? gamePid : 0, processCurrent = running, startedAt = startedAt.ToString("O"), updatedAt = now, status = running ? "running" : "stopped", uptimeSeconds = running ? Math.Max(0, (long)(DateTimeOffset.UtcNow - startedAt).TotalSeconds) : 0,
                 memory = new { rssBytes = running ? 96_000_000L + random.Next(0, 9_000_000) : 0, heapUsedBytes = running ? 41_000_000L : 0 },
-                players, rooms, connections = players.Count, maxPlayers = MaxPlayers,
-                counters = new { connections = totalConnections, disconnections = totalDisconnections, roomsCreated = 9, roomJoins = 15, roomLeaves = 11, errors = 1 },
+                players, rooms, connections = players.Length, mapAtlas = DemoAtlas, eclatsConfig = ConfigStatus(),
+                counters = new { connections = totalConnections, disconnections = totalDisconnections, roomsCreated = 9, roomJoins = 15, roomLeaves = totalRoomLeaves, errors = 1 },
                 lastError = new { at = DateTimeOffset.UtcNow.AddHours(-3).ToString("O"), code = "ROOM_FULL" }
             },
             network = new { publication = running ? "available" : "unavailable", tunnel = running ? "connected" : "disconnected", updatedAt = now },
@@ -99,8 +100,21 @@ public sealed class DemoTransport : IPanelTransport
         return snapshot;
     }
     private DemoBackup Find(string name) => backups.FirstOrDefault(backup => backup.Name == name) ?? throw new InvalidOperationException("Sauvegarde de démonstration introuvable.");
-    private void Stop() { if (running) totalDisconnections += 3; running = false; }
-    private void Start() { if (!running) { gamePid++; totalConnections += 3; startedAt = DateTimeOffset.UtcNow; } running = true; }
+    private void Stop() { if (running) totalDisconnections += CurrentPlayers().Count(); running = false; }
+    private void Start()
+    {
+        if (!running)
+        {
+            gamePid++; startedAt = DateTimeOffset.UtcNow;
+            foreach (var player in demoPlayers)
+            {
+                player.Connected = !maintenance && !IsBanned(player.AccountHash);
+                player.ConnectedAt = startedAt;
+            }
+            running = true;
+            totalConnections += CurrentPlayers().Count();
+        }
+    }
     private static byte[] CreateSyntheticDatabase()
     {
         // Sized dummy content preserves the preview's realistic file sizes; it is not user data.
@@ -115,8 +129,8 @@ public sealed class DemoTransport : IPanelTransport
         string At(int minutes) => DateTimeOffset.Now.AddMinutes(-minutes).ToString("yyyy-MM-ddTHH:mm:sszzz") + " eclat-vps node[1428]: ";
         return "DÉMONSTRATION — données fictives\n" + string.Join("\n", new[] {
             At(64) + "Serveur Éclat démarré sur 127.0.0.1:8787", At(64) + "Base SQLite ouverte, intégrité vérifiée", At(63) + "Annuaire Coop publié",
-            At(41) + "Salon créé : Prairie (public)", At(40) + "Aurore a rejoint Prairie", At(39) + "Lucas a rejoint Prairie",
-            At(22) + "Avertissement : tunnel lent, nouvelle tentative", At(21) + "Tunnel reconnecté", At(18) + "Salon créé : Forêt de Jade (privé)",
+            At(41) + "Salon créé : Les promeneurs du matin (public)", At(40) + "Aurore a rejoint le salon", At(39) + "Lucas a rejoint le salon",
+            At(22) + "Avertissement : tunnel lent, nouvelle tentative", At(21) + "Tunnel reconnecté", At(18) + "Salon créé : Les explorateurs de l’aurore (privé)",
             At(12) + "Refus ROOM_FULL : salon complet", At(6) + "Sauvegarde terminée", At(1) + "Contrôle du protocole : réponse en 4,1 ms" }.Concat(events.Select(message => At(0) + message)));
     }
     private sealed record DemoBackup(string Name, DateTimeOffset Created, byte[] Bytes);

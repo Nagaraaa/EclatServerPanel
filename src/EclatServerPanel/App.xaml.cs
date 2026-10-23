@@ -11,7 +11,7 @@ public partial class App : Application
         if (e.Args.Contains("--self-test"))
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            try { SelfTests.Run(); await PanelUiTests.RunAsync(); Shutdown(0); }
+            try { SelfTests.Run(); AdminFeatureTests.Run(); await PanelUiTests.RunAsync(); await AdminUiTests.RunAsync(); Shutdown(0); }
             catch (Exception ex) { Console.Error.WriteLine(ex.ToString()); Shutdown(1); }
             return;
         }
@@ -77,6 +77,14 @@ public partial class App : Application
                     await window.ShowPageForCaptureAsync(page);
                     Capture(window, Path.Combine(directory, page.ToLowerInvariant() + ".png"));
                 }
+                foreach (var mode in new[] { "map-table", "map-fan", "map-crowd", "map-cards", "map-places", "commands", "config", "statistics", "audit" })
+                {
+                    await window.CaptureAdministrationAsync(mode);
+                    Capture(window, Path.Combine(directory, mode + ".png"));
+                }
+                await window.ShowAdminConfirmationForCaptureAsync();
+                Capture(window, Path.Combine(directory, "admin-confirmation.png"));
+                window.DismissCaptureDialog();
                 await window.ShowRestoreDialogForCaptureAsync();
                 Capture(window, Path.Combine(directory, "restore-dialog.png"));
                 Shutdown();

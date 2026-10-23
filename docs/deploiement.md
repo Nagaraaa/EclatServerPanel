@@ -109,6 +109,35 @@ Cette mise à jour ne remplace ni la configuration ni les données du jeu et ne 
 
 Le panel accepte également les réponses des versions précédentes de l’outil. La version actuelle vérifie en plus que le processus qui fournit le suivi des joueurs appartient au service du jeu ; cela évite de montrer l’activité d’un processus terminé.
 
+## Activer la carte et les commandes du jeu
+
+Ces fonctions demandent aussi la version du serveur de jeu qui fournit les positions, le canal local d’administration et le validateur de configuration. Mettre à jour le panel seul ne les active pas. Préparer les deux mises à jour ensemble, puis prévoir leur installation sur le VPS avec son administrateur ; les essais de développement ne déploient rien automatiquement.
+
+Le serveur doit écrire son suivi dans le dossier donné par `ECLAT_SERVER_DATA`. Sous Linux, il y crée `admin.sock`, réservé à son compte avec le mode `0600`. Aucun port d’administration supplémentaire n’est ouvert. Le compte SSH conserve sa commande forcée ; l’outil root se connecte à cette socket et vérifie son propriétaire et, sous Linux, l’identité du processus en face.
+
+Le fichier `/etc/eclat-panel.json` peut préciser ces chemins fixes :
+
+```json
+{
+  "adminSocket": "/var/lib/eclat-originel/admin.sock",
+  "configValidator": "/opt/eclat-originel/app/server/src/admin-validate-config.js",
+  "nodeBinary": "/usr/local/bin/node",
+  "operationLock": "/run/lock/eclat-panel.lock"
+}
+```
+
+Ces champs complètent la configuration existante. Le chemin du validateur dépend du paquet installé : le paquet serveur utilise `app/server/src/`, tandis qu’un dépôt compilé sur place utilise `dist/server/src/`. Le programme, le validateur et la configuration de l’outil doivent rester sous le contrôle de root. Le client Windows ne peut pas choisir ces chemins ni envoyer une commande système.
+
+L’outil valide chaque modification de `eclats.json` avec le parseur du serveur Node.js. Il remplace ensuite le fichier de façon atomique, en conservant son propriétaire et ses permissions. Un checksum attendu protège contre l’écrasement d’une autre modification. L’écriture seule ne vaut pas acceptation : le panel attend le checksum chargé par le serveur et peut afficher une version encore en attente ou refusée. Un serveur arrêté ne peut pas confirmer un rechargement.
+
+Les vingt dernières versions de configuration et le journal des changements restent réservés à root, dans `/var/backups/eclat-originel/configuration/` et `configuration-audit.jsonl`. Restaurer une configuration passe par la même validation et ne restaure pas la base SQLite. Les commandes sur les comptes et les salons sont enregistrées par le serveur dans sa transaction ; le panel réunit ces entrées avec celles de configuration.
+
+Les statistiques ouvrent la base en lecture seule. Les remboursements administratifs de jetons sont comptés séparément des parties et des mises du casino. Les jours d’activité utilisent UTC et les connexions authentifiées observées depuis l’installation de cette version ; il n’existe pas d’historique de présence antérieur à reconstruire. Avec une ancienne base sans ce suivi, l’outil signale explicitement que les chiffres proviennent seulement de l’activité économique.
+
+Le contrôle de disponibilité reconnaît la réponse `MAINTENANCE` : elle prouve que le jeu répond et évite que le minuteur de surveillance redémarre les parties encore en cours. Elle ne signifie pas que de nouveaux joueurs peuvent rejoindre le serveur.
+
+Pour les contrats et les essais sans VPS, consulter [les actions Linux](administration-linux.md).
+
 ## Contrôle de disponibilité et sauvegardes
 
 Le minuteur `eclat-watchdog.timer` contrôle le jeu environ chaque minute. Après trois échecs consécutifs du protocole, il redémarre le service. Il laisse un service volontairement arrêté dans cet état. Un redémarrage peut interrompre une partie ; consulter les journaux si cela se répète.

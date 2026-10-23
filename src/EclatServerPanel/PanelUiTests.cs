@@ -14,6 +14,8 @@ internal static class PanelUiTests
     internal static async Task RunAsync()
     {
         Check(Application.Current is not null && Application.Current.Dispatcher.CheckAccess(), "UI tests require the WPF dispatcher.");
+        await RawSwitchesAsync();
+        await RoomClosureAsync();
         await MonitorAndNetworkAsync();
         await FailedRefreshAsync();
         await QueuedNavigationAsync();
@@ -22,6 +24,42 @@ internal static class PanelUiTests
         await RestartFreshnessAsync();
         await RestoreConfirmationAsync();
         await ConnectionResetAsync();
+    }
+
+    private static async Task RawSwitchesAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        foreach (var prefix in new[] { "RawSessions", "RawDiagnostics" })
+        {
+            var toggle = Find<System.Windows.Controls.Primitives.ToggleButton>(test.Window, prefix + "Toggle");
+            toggle.ApplyTemplate();
+            for (var index = 0; index < 4; index++)
+            {
+                toggle.IsChecked = true;
+                await Task.Delay(180);
+                Check(Find<FrameworkElement>(test.Window, prefix + "Box").Visibility == Visibility.Visible, "Raw data must open.");
+                toggle.IsChecked = false;
+                await Task.Delay(180);
+                Check(Find<FrameworkElement>(test.Window, prefix + "Box").Visibility == Visibility.Collapsed, "Raw data must close.");
+            }
+        }
+        Check(test.Window.IsVisible, "Switches must not close the panel.");
+    }
+
+    private static async Task RoomClosureAsync()
+    {
+        using var test = await TestWindow.CreateAsync();
+        await test.Window.RefreshAsync();
+        var rooms = Find<ItemsControl>(test.Window, "RoomCards");
+        Check(rooms.Items.OfType<RoomItem>().All(room => room.Id.Length > 0 && room.Origin == test.Settings), "Room actions must retain the ID and originating connection.");
+        var transport = new DemoTransport();
+        await transport.SendAsync(test.Settings, "close-room", "r1");
+        var status = await transport.SendAsync(test.Settings, "status");
+        Check(!status.GetProperty("monitor").GetProperty("rooms").EnumerateArray().Any(room => room.GetProperty("id").GetString() == "r1"), "Closed room must disappear.");
+        Check(!status.GetProperty("monitor").GetProperty("players").EnumerateArray().Any(player => player.GetProperty("roomId").GetString() == "r1"), "Closed room members must disconnect.");
+        Check(status.GetProperty("monitor").GetProperty("rooms").GetArrayLength() == 2, "Other rooms must remain open.");
+        try { SshTransport.ValidateRequest("close-room", "../../bad"); throw new Exception("Invalid ID accepted"); }
+        catch (InvalidOperationException) { }
     }
 
     private static async Task MonitorAndNetworkAsync()

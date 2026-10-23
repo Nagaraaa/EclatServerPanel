@@ -18,6 +18,22 @@ public sealed record ConnectionSettings
     public static string DirectoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EclatServerPanel");
     public static string SettingsPath => Path.Combine(DirectoryPath, "connection.json");
     public static string KnownHostsPath => Path.Combine(DirectoryPath, "known_hosts");
+    public static string ProfilesPath => Path.Combine(DirectoryPath, "connections.json");
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Label => $"{User}@{Host}:{Port}";
+    public static IReadOnlyList<ConnectionSettings> LoadProfiles()
+    {
+        var profiles = new List<ConnectionSettings>();
+        try
+        {
+            if (File.Exists(ProfilesPath) && new FileInfo(ProfilesPath).Length <= 262144)
+                profiles.AddRange(JsonSerializer.Deserialize<List<ConnectionSettings>>(File.ReadAllText(ProfilesPath)) ?? []);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+        var current = Load();
+        if (!string.IsNullOrWhiteSpace(current.Host) && !profiles.Any(p => p.EndpointIdentity == current.EndpointIdentity && p.User == current.User)) profiles.Add(current);
+        return profiles.Where(p => !string.IsNullOrWhiteSpace(p.Host)).Take(100).ToArray();
+    }
     public static ConnectionSettings Load()
     {
         try
@@ -36,6 +52,14 @@ public sealed record ConnectionSettings
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
             File.Move(temp, SettingsPath, true);
+            var profiles = LoadProfiles().Where(p => p.EndpointIdentity != EndpointIdentity || p.User != User).Append(this).TakeLast(100).ToArray();
+            var profilesTemp = ProfilesPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(profilesTemp, JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true }));
+                File.Move(profilesTemp, ProfilesPath, true);
+            }
+            finally { if (File.Exists(profilesTemp)) File.Delete(profilesTemp); }
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }

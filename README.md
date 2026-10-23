@@ -4,17 +4,29 @@ Application Windows pour administrer un serveur de jeu Éclat à distance : voir
 
 Le panel passe par OpenSSH et une clé privée conservée sur votre PC. Le serveur continue de tourner lorsque l’application est fermée. Aucun port d’administration Web supplémentaire n’est nécessaire.
 
+**La dernière version publiée est la 1.1.1.** La carte des joueurs et les nouvelles commandes décrites ci-dessous sont proposées en préversion dans cette PR. Elles demandent aussi le [serveur compatible proposé dans la PR 36](https://github.com/Nagaraaa/pokemon-eclat-originel/pull/36) et le nouvel outil Linux. L’archive de la version 1.1.1 ne les contient pas. Cette préversion a été testée localement ; aucun VPS n’a été modifié pour sa validation.
+
 ![Vue d’ensemble du panel en mode démonstration](docs/panel.png)
 
 *Aperçu avec des données fictives.*
 
-L’interface sombre suit l’état du serveur en direct : orbe d’état qui pulse quand le jeu répond, compteurs et jauges animés, courbes des joueurs, salons, latence et charge sur les dernières actualisations. Les actions sensibles (arrêt, redémarrage, restauration) se confirment dans la fenêtre même ; les résultats s’affichent en notifications.
+L’interface sombre présente l’état du jeu, ses ressources, ses joueurs et ses salons. Les actions sensibles se confirment dans la fenêtre ; les résultats et les erreurs restent visibles dans le panel.
 
 | Joueurs et salons | Journaux | Sauvegardes |
 | --- | --- | --- |
 | ![Salons et joueurs](docs/captures/sessions.png) | ![Journaux filtrables](docs/captures/logs.png) | ![Instantanés et restauration](docs/captures/backups.png) |
 | **Diagnostic** | **Connexion** | **Confirmation** |
 | ![Diagnostic structuré](docs/captures/diagnostics.png) | ![Connexion en trois étapes](docs/captures/connection.png) | ![Restauration confirmée par saisie](docs/captures/restore-dialog.png) |
+
+| Carte et tableau | Groupe de cinq joueurs | Groupe de douze joueurs |
+| --- | --- | --- |
+| ![Carte et liste des joueurs fictifs](docs/captures/map-table.png) | ![Joueurs ouverts en éventail](docs/captures/map-fan.png) | ![Liste d’un groupe de plus de huit joueurs](docs/captures/map-crowd.png) |
+
+| Commandes d’administration | Confirmation par saisie |
+| --- | --- |
+| ![Commandes disponibles dans la préversion](docs/captures/commands.png) | ![Confirmation du montant d’une modification de solde](docs/captures/admin-confirmation.png) |
+
+*Toutes les captures utilisent des données de démonstration.*
 
 ## Fonctions
 
@@ -28,6 +40,16 @@ L’interface sombre suit l’état du serveur en direct : orbe d’état qui pu
 | Sauvegarder | Créer un instantané SQLite cohérent et en télécharger une copie vérifiée par SHA-256. |
 | Restaurer | Choisir une sauvegarde, confirmer la restauration et conserver une copie de la base précédente. |
 
+La préversion ajoute :
+
+- une carte schématique avec regroupement des joueurs, positions anciennes estompées et liste en tableau, fiches ou par lieu ;
+- l’expulsion, le bannissement et sa levée, la fermeture ou la modification d’un salon et le mode maintenance ;
+- les corrections de solde Éclats et les remboursements de jetons, avec motif et journal ;
+- l’édition des évènements, bannières et prix, la confirmation du rechargement par le jeu et vingt versions de configuration ;
+- les statistiques en lecture seule : Éclats en circulation, tirages, chromatiques, casino et activité quotidienne des comptes.
+
+Le [guide carte et commandes](docs/carte-commandes.md) détaille les confirmations, les données visibles et les limites. Les lieux et leurs coordonnées viennent du serveur ; le panel dessine ses propres formes et n’embarque pas de carte extraite du jeu.
+
 Le dépôt contient le panel et son outil d’administration Linux. Il ne contient ni ROM, ni sprites, ni code du serveur de jeu, ni données de joueurs. La distribution du serveur se fournit séparément.
 
 L’état est contrôlé toutes les vingt secondes, quelle que soit la page ouverte. Les courbes conservent les dernières mesures de la session ; elles repartent de zéro si la connexion change. Les journaux se chargent à l’ouverture de leur page ou sur actualisation.
@@ -40,13 +62,13 @@ Les commandes sont exécutées l’une après l’autre, y compris pendant une c
 
 **Sur le PC :** Windows 10 ou 11 en 64 bits, avec le client OpenSSH Windows (`ssh`, `ssh-keyscan`, `ssh-keygen`). Une compilation autonome inclut le runtime .NET.
 
-**Sur le VPS :** Debian avec systemd, Python 3, SQLite et Node.js **24.14 ou plus récent** pour la distribution du jeu prévue ici. L’installation initiale demande un accès administrateur. L’application utilise ensuite un compte SSH dédié.
+**Sur le VPS :** Debian avec systemd, Python 3, SQLite et Node.js **24.14 ou plus récent dans la branche 24** pour la distribution du jeu prévue ici. L’installation initiale demande un accès administrateur. L’application utilise ensuite un compte SSH dédié.
 
 Le panel est conçu pour un serveur Éclat compatible avec l’outil Linux de ce dépôt. Il ne détecte pas automatiquement les commandes de n’importe quel serveur Pokémon.
 
 ## Télécharger
 
-Prendre l'archive Windows dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l'archive.
+Prendre l’archive Windows dans les [versions publiées](https://github.com/Nagaraaa/EclatServerPanel/releases/latest), la décompresser puis ouvrir `EclatServerPanel.exe`. Le runtime .NET est inclus. Le fichier `SHA256SUMS.txt` de la version permet de vérifier l’archive. Ce lien fournit actuellement la 1.1.1 ; pour essayer la carte et les nouvelles commandes, compiler la préversion et préparer un serveur de test compatible.
 
 ## Première connexion
 
@@ -78,7 +100,9 @@ Pour voir l’interface sans se connecter à un serveur :
 .\dist\win-x64\EclatServerPanel.exe --demo
 ```
 
-Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. `--capture-demo-pages DOSSIER` enregistre une capture de chaque page de la démo, après ses animations, ainsi que la fenêtre de confirmation de restauration.
+Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. La préversion fournit vingt joueurs, des groupes de cinq et douze personnes, des positions anciennes, un compte banni et un évènement actif. Les commandes y modifient seulement les données simulées.
+
+`--capture-demo-pages DOSSIER` enregistre chaque page, les trois présentations de la liste, les groupes ouverts, les écrans d’administration et leurs confirmations.
 
 ## Exploitation
 
@@ -91,9 +115,13 @@ Le mode démo utilise des données fictives et ne permet pas de piloter le VPS. 
 
 Le [guide de migration](docs/migration.md) décrit la bascule depuis un ancien hôte. Les [notes de sécurité](docs/securite.md) précisent les accès et les limites du masquage des journaux.
 
+Les nouvelles commandes passent par une socket locale privée sur le VPS. Les corrections d’économie sont exécutées et journalisées par le serveur. Le [guide des actions Linux](docs/administration-linux.md) décrit les échanges, la validation des arguments et les contrôles de configuration.
+
 ## Validation
 
-Le dépôt prévoit une compilation Windows et des vérifications automatisées dans [GitHub Actions](.github/workflows/build.yml). Les tests du panel couvrent les réponses invalides, les empreintes SSH, l’intégrité des téléchargements et les parcours de l’interface avec un serveur simulé : changement de page pendant un contrôle, confirmations, erreur de connexion et changement d’hôte. Les tests Linux vérifient notamment les sauvegardes SQLite et la restauration dans un dossier temporaire. Ils ne prouvent pas qu’un VPS donné est disponible ou qu’une partie coop fonctionne.
+Le dépôt prévoit une compilation Windows et des vérifications automatisées dans [GitHub Actions](.github/workflows/build.yml). Les tests du panel couvrent les réponses invalides, les empreintes SSH, l’intégrité des téléchargements et les parcours de l’interface : navigation pendant un contrôle, confirmations, changement d’hôte, carte, tri et filtres conservés, configuration et journal masqué.
+
+Les tests Linux vérifient les commandes, les sauvegardes SQLite, les restaurations et les écritures de configuration dans des dossiers temporaires. Deux essais supplémentaires peuvent lancer le vrai serveur de développement et son validateur, sur une nouvelle base locale. Ils sont ignorés lorsque cette distribution séparée n’est pas fournie ; leur lancement est décrit dans [les actions Linux](docs/administration-linux.md). Ces essais ne mesurent pas la disponibilité d’un VPS ou une partie jouée entre deux PC.
 
 Vérifications du panel sous Windows :
 
